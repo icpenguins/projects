@@ -115,12 +115,12 @@ function Get-DiscInfoOptions {
 
         if ($index -lt 10) {
             $optSelect = "Title &{0} - {2} {3}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE]
-            $optText = "Title {0}: Chapters ({1}) {2} {3} - {4}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item[$TITLE_NAME]
+            $optText = "Title {0}: Chapters ({1}) {2} {3} {4} - {5}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item["Details"][$VIDEO_STREAM][$VIDEO_STREAM_RATO], $item[$TITLE_NAME]
 
             $options.Add($i, @{Select = $optSelect; Text = $optText; Value = $key})
         }
         else {
-            "SKIPPING: Title {0} Chapters ({1}) {2} {3} - {4}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item[$TITLE_NAME] | Write-Host -ForegroundColor Yellow
+            "SKIPPING: Title {0} Chapters ({1}) {2} {3} {4} - {5}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item["Details"][$VIDEO_STREAM][$VIDEO_STREAM_RATO], $item[$TITLE_NAME] | Write-Host -ForegroundColor Yellow
         }
 
         $i++
@@ -165,10 +165,10 @@ function Print-Titles {
         $item = $DiscInfo["Title"][$index]
 
         if ($i -lt 10) {
-            "Title {0}: Chapters ({1}) {2} {3} - {4}" -f $index, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item[$TITLE_NAME] | Write-Host -ForegroundColor Green
+            "Title {0}: Chapters ({1}) {2} {3} {4} - {5}" -f $index, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item["Details"][$VIDEO_STREAM][$VIDEO_STREAM_RATO], $item[$TITLE_NAME] | Write-Host -ForegroundColor Green
         }
         else {
-            "SKIPPING: Title {0}: Chapters ({1}) {2} {3} - {4}" -f $index, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item[$TITLE_NAME] | Write-Debug
+            "SKIPPING: Title {0}: Chapters ({1}) {2} {3} {4} - {5}" -f $index, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item["Details"][$VIDEO_STREAM][$VIDEO_STREAM_RATO], $item[$TITLE_NAME] | Write-Debug
         }
 
         $i++
@@ -185,7 +185,7 @@ function Print-TitleSelected {
         Write-Host "The following titles are selected:"
 
         foreach ($item in $Selected) {
-            Write-Host $Choices[$item]["Text"]
+            $Choices[$item]["Text"] | Write-Host -ForegroundColor Green
         }
     }
 }
@@ -224,6 +224,9 @@ function Start-Ripping {
     $rMakeMKV = Prompt-General -Title "" -Message "Do you want to rip a disc with MakeMKV?" -Choices $rMakeOpt
 
     if ($rMakeMKV -eq 0) {
+        "MakeMKV path '{0}'" -f $MakeMKV | Write-Host -ForegroundColor Gree
+        "FFmpeg path '{0}'" -f $FFmpeg | Write-Host -ForegroundColor Gree
+
         $discOpt = Get-AvailableDrives -Path $MakeMKV
 
         $rDisc = Prompt-General -Title "Choose Drive for MakeMKV" -Message "Which drive would you like to use?" -Choices $discOpt -DefaultChoice 1
