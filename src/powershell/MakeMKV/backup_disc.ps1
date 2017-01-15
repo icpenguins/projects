@@ -1,10 +1,9 @@
-﻿# https://ffmpeg.org/ffmpeg-protocols.html#http
+﻿# Copyright (c) 4252 Concepts and contributors. All rights reserved. Licensed under the Microsoft Reciprocal License. See LICENSE.TXT file in the project root for full license information.
 
 param(
     $MakeMKVPath = ${env:ProgramFiles(x86)} + "\MakeMKV\makemkvcon64.exe",
     $FFmpegPath = ${env:ProgramFiles} + "\FFmpeg\bin\ffmpeg.exe"
 )
-
 Set-StrictMode -Version Latest
 
 Set-Variable DISC_TITLE -Value "2"
@@ -26,15 +25,14 @@ function Get-AvailableDrives {
     $options = [ordered]@{ 0 = @{Select = "&Cancel"; Text = "Cancel the operation"; Value = "-1"; }}
 
     $rdAvailable = &$path -r --cache=1 info disc:9999 | Select-String -Pattern "DRV:\d,2,"
-    #$rdAvailable = Get-Item -Path .\makemkv_out_discs.txt | Select-String -Pattern "DRV:\d,2,"
 
     for ($i = 0; $i -lt $rdAvailable.Matches.Length; $i++) {
-            $rdMatches = [regex]::Match($rdAvailable[$i].Line, 'DRV:(\d+).*?"(.*?)","(.*?)","(.*?)"')
+        $rdMatches = [regex]::Match($rdAvailable[$i].Line, 'DRV:(\d+).*?"(.*?)","(.*?)","(.*?)"')
 
-            $optSelect = "&{0} {1} ({2})" -f $rdMatches.Captures.Groups[1].Value, $rdMatches.Captures.Groups[4].Value, $rdMatches.Captures.Groups[3].Value
-            $optText = "DRV:{0} {1} {2} ({3})" -f $rdMatches.Captures.Groups[1].Value, $rdMatches.Captures.Groups[4].Value, $rdMatches.Captures.Groups[2].Value, $rdMatches.Captures.Groups[3].Value
+        $optSelect = "&{0} {1} ({2})" -f $rdMatches.Captures.Groups[1].Value, $rdMatches.Captures.Groups[4].Value, $rdMatches.Captures.Groups[3].Value
+        $optText = "DRV:{0} {1} {2} ({3})" -f $rdMatches.Captures.Groups[1].Value, $rdMatches.Captures.Groups[4].Value, $rdMatches.Captures.Groups[2].Value, $rdMatches.Captures.Groups[3].Value
 
-            $options.Add($i+1, @{Select = $optSelect; Text = $optText; Value = $rdMatches.Captures.Groups[1].Value})
+        $options.Add($i+1, @{Select = $optSelect; Text = $optText; Value = $rdMatches.Captures.Groups[1].Value})
      }
 
     return $options
@@ -50,7 +48,7 @@ function Get-DiscInfo {
     $rdAvailable = &$Path -r info disc:$Disc | Select-String -Pattern "([CST]INFO)(.*?$)"
     $hash = [ordered]@{Disc = [ordered]@{}; Title = [ordered]@{}}
 
-    $discTitles = $rdAvailable.Matches.Captures | %{
+    $rdAvailable.Matches.Captures | %{
         if ($_.Groups[1].Value.ToUpper() -eq "SINFO") {
             $SINFO = [regex]::Match($_.Groups[0].Value, 'SINFO:(\d+),(\d+),(\d+),(\d+),"(.*?)"')
 
@@ -108,8 +106,7 @@ function Get-DiscInfoOptions {
 
     $options = [ordered]@{ 0 = @{Select = "&Cancel"; Text = "Cancel the operation"; Value = "-1"; };
                            1 = @{Select = "&Reset"; Text = "Reset the selections"; Value = "-2"; };
-                           2 = @{Select = "&Go"; Text = "Selections good to go"; Value = "-3"; }
-                         }
+                           2 = @{Select = "&Go"; Text = "Selections good to go"; Value = "-3"; } }
 
     $i = 3
     foreach ($key in $Info["Title"].Keys) {
@@ -314,3 +311,14 @@ function Start-Ripping {
 }
 
 Start-Ripping $MakeMKVPath $FFmpegPath
+
+Remove-Variable DISC_TITLE
+Remove-Variable DISC_TITLE_SHORT
+Remove-Variable VIDEO_STREAM
+Remove-Variable VIDEO_STREAM_TYPE
+Remove-Variable VIDEO_STREAM_RATO
+Remove-Variable VIDEO_STREAM_RESOLUTION
+Remove-Variable TITLE_CHAPTERS
+Remove-Variable TITLE_TIME
+Remove-Variable TITLE_SIZE
+Remove-Variable TITLE_NAME
