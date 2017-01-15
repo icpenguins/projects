@@ -1,8 +1,8 @@
 ﻿# https://ffmpeg.org/ffmpeg-protocols.html#http
 
 param(
-    $MakeMKVPath,
-    $FFmpegPath
+    $MakeMKVPath = ${env:ProgramFiles(x86)} + "\MakeMKV\makemkvcon64.exe",
+    $FFmpegPath = ${env:ProgramFiles} + "\FFmpeg\bin\ffmpeg.exe"
 )
 
 Set-StrictMode -Version Latest
@@ -17,9 +17,6 @@ Set-Variable TITLE_CHAPTERS -Value "8"
 Set-Variable TITLE_TIME -Value "9"
 Set-Variable TITLE_SIZE -Value "10"
 Set-Variable TITLE_NAME -Value "27"
-
-$makeMKVPath = 'C:\Program Files (x86)\MakeMKV\makemkvcon64.exe'
-$ffMpegPath = 'E:\NOBACKUP\FFmpeg\bin\ffmpeg.exe'
 
 function Get-AvailableDrives {
     param(
@@ -120,8 +117,8 @@ function Get-DiscInfoOptions {
         $item = $Info["Title"][$key]
 
         if ($index -lt 10) {
-            $optSelect = "&{0} C({1}) {2} {3}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_SIZE], $item[$TITLE_TIME]
-            $optText = "{0} Chapters ({1}) {2} {3} - {4}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item[$TITLE_NAME]
+            $optSelect = "Title &{0} - {2} {3}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE]
+            $optText = "Title {0}: Chapters ({1}) {2} {3} - {4}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item[$TITLE_NAME]
 
             $options.Add($i, @{Select = $optSelect; Text = $optText; Value = $key})
         }
@@ -171,10 +168,10 @@ function Print-Titles {
         $item = $DiscInfo["Title"][$index]
 
         if ($i -lt 10) {
-            "Chapters ({0}) {1} {2} - {3}" -f $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item[$TITLE_NAME] | Write-Host -ForegroundColor Green
+            "Title {0}: Chapters ({1}) {2} {3} - {4}" -f $index, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item[$TITLE_NAME] | Write-Host -ForegroundColor Green
         }
         else {
-            "SKIPPING: Chapters ({0}) {1} {2} - {3}" -f $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item[$TITLE_NAME] | Write-Host -ForegroundColor DarkYellow
+            "SKIPPING: Title {0}: Chapters ({1}) {2} {3} - {4}" -f $index, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item[$TITLE_NAME] | Write-Debug
         }
 
         $i++
@@ -198,12 +195,12 @@ function Print-TitleSelected {
 
 function Start-FFmpeg {
     param(
+        $FFmpeg,
         $Path,
         $DiscTitle,
         $TitleName
     )
 
-    $fileName = $Path.Split("/")[4]
     $newName = ".\{0}\{1}.mp4"-f $DiscTitle, $TitleName
     Write-Host $newName
 
@@ -216,17 +213,21 @@ function Start-FFmpeg {
     $time = Get-Date
     "FFmpeg started at {0}" -f $time | Write-Host
 
-    Measure-Command { &$ffMpegPath -hide_banner -hwaccel dxva2 -y -i $Path -vcodec h264_nvenc -acodec copy $newName | Out-Host }
+    Measure-Command { &$FFmpeg -hide_banner -hwaccel dxva2 -y -i $Path -vcodec h264_nvenc -acodec copy $newName| Out-Host }
 }
 
 function Start-Ripping {
+    param(
+        $MakeMKV,
+        $FFmpeg
+    )
     $rMakeOpt = [ordered]@{ 0 = @{Select = '&Yes'; Text = 'Gets a lists of available discs.'; Value = 0}}
     $rMakeOpt.Add(1, @{Select = '&No'; Text = 'Exit'; Value = "1"})
 
     $rMakeMKV = Prompt-General -Title "" -Message "Do you want to rip a disc with MakeMKV?" -Choices $rMakeOpt
 
     if ($rMakeMKV -eq 0) {
-        $discOpt = Get-AvailableDrives -Path $makeMKVPath
+        $discOpt = Get-AvailableDrives -Path $MakeMKV
 
         $rDisc = Prompt-General -Title "Choose Drive for MakeMKV" -Message "Which drive would you like to use?" -Choices $discOpt -DefaultChoice 1
 
@@ -235,7 +236,7 @@ function Start-Ripping {
             $done = $false
             $selected = New-Object System.Collections.ArrayList
 
-            $discInfo = Get-DiscInfo -Path $makeMKVPath -Disc $discOpt[$rDisc]["Value"]
+            $discInfo = Get-DiscInfo -Path $MakeMKV -Disc $discOpt[$rDisc]["Value"]
 
             Print-Titles $discInfo
 
@@ -255,7 +256,7 @@ function Start-Ripping {
                 }
                 elseif ($rTitle -gt 2){
                     if (!$selected.Contains($rTitle)) {
-                        $selected.Add($rTitle)
+                        $selected.Add($rTitle) | Out-Null
                     }
                     Print-TitleSelected $discOpt $selected
                 }
@@ -266,7 +267,7 @@ function Start-Ripping {
                 Measure-Command {
                     $Process = new-Object System.Diagnostics.Process
                     $Process.StartInfo.CreateNoWindow = $true
-                    $Process.StartInfo.FileName = $makeMKVPath
+                    $Process.StartInfo.FileName = $MakeMKV
                     $Process.StartInfo.Arguments = "-r stream --noscan disc:0"
                     $Process.StartInfo.RedirectStandardOutput = $true
                     $Process.StartInfo.RedirectStandardError = $true
@@ -297,9 +298,8 @@ function Start-Ripping {
                         $req = Invoke-WebRequest -Uri $uri
                         $file = [regex]::Match($req.RawContent, '.*?file\d+.*?"(.*?)"')
 
-                        Write-Host $file
                         if ($file -and $file.Groups.Count -gt 0) {
-                            Start-FFmpeg $file.Groups[1].Value $discInfo["Disc"][$DISC_TITLE_SHORT] $discInfo["Title"][$discOpt[$s]["Value"]][$TITLE_NAME].Split(".")[0]
+                            Start-FFmpeg $FFmpeg $file.Groups[1].Value $discInfo["Disc"][$DISC_TITLE_SHORT] $discInfo["Title"][$discOpt[$s]["Value"]][$TITLE_NAME].Split(".")[0]
                         }
                         else {
                             Write-Host "Could not find file to convert."
@@ -313,4 +313,4 @@ function Start-Ripping {
     }
 }
 
-Start-Ripping
+Start-Ripping $MakeMKVPath $FFmpegPath
