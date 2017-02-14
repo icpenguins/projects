@@ -190,6 +190,9 @@ function Print-TitleSelected {
     }
 }
 
+# https://trac.ffmpeg.org/wiki/HWAccelIntro
+# https://trac.ffmpeg.org/wiki/Encode/H.264
+
 function Start-FFmpeg {
     param(
         $FFmpeg,
@@ -198,7 +201,7 @@ function Start-FFmpeg {
         $TitleName
     )
 
-    $newName = ".\{0}\{1}.mp4"-f $DiscTitle, $TitleName
+    $newName = ".\{0}\{1}.mkv"-f $DiscTitle, $TitleName
     Write-Host $newName
 
     $testDir = Test-Path $DiscTitle
@@ -210,7 +213,7 @@ function Start-FFmpeg {
     $time = Get-Date
     "FFmpeg started at {0}" -f $time | Write-Host
 
-    Measure-Command { &$FFmpeg -hide_banner -hwaccel dxva2 -y -i $Path -vcodec h264_nvenc -acodec copy $newName| Out-Host }
+    Measure-Command { &$FFmpeg -hide_banner -hwaccel dxva2 -y -i $Path -c:v h264_nvenc -preset slow -level 5.1 -profile:v high -2pass 1 -qdiff 9 -qmin 14 -qmax 24 -minrate 1000k -maxrate 27000k -b:v 6400k -c:a copy -scodec copy $newName| Out-Host }
 }
 
 function Start-Ripping {
@@ -240,10 +243,10 @@ function Start-Ripping {
 
             Print-Titles $discInfo
 
-            $discOpt = Get-DiscInfoOptions $discInfo
+            $discInfoOpt = Get-DiscInfoOptions $discInfo
 
             do {
-                $rTitle = Prompt-General -Title "" -Message "Which title would you like to use?" -Choices $discOpt -DefaultChoice -1
+                $rTitle = Prompt-General -Title "" -Message "Which title would you like to use?" -Choices $discInfoOpt -DefaultChoice -1
 
                 if ($rTitle -eq 0) {
                     break
@@ -258,48 +261,50 @@ function Start-Ripping {
                     if (!$selected.Contains($rTitle)) {
                         $selected.Add($rTitle) | Out-Null
                     }
-                    Print-TitleSelected $discOpt $selected
+                    Print-TitleSelected $discInfoOpt $selected
                 }
             }
             while(-Not $done)
 
             if ($rTitle -ne 0) {
-                Measure-Command {
-                    $Process = new-Object System.Diagnostics.Process
-                    $Process.StartInfo.CreateNoWindow = $true
-                    $Process.StartInfo.FileName = $MakeMKV
-                    $Process.StartInfo.Arguments = "-r stream --noscan disc:0"
-                    $Process.StartInfo.RedirectStandardOutput = $true
-                    $Process.StartInfo.RedirectStandardError = $true
-                    $Process.StartInfo.UseShellExecute = $false
+                $Process = new-Object System.Diagnostics.Process
+                $Process.StartInfo.CreateNoWindow = $true
+                $Process.StartInfo.FileName = $MakeMKV
+                $Process.StartInfo.Arguments = "-r stream --noscan disc:" + $discOpt[$rDisc]["Value"] + " --bindport=5100" + $discOpt[$rDisc]["Value"]
+                $Process.StartInfo.RedirectStandardOutput = $true
+                $Process.StartInfo.RedirectStandardError = $true
+                $Process.StartInfo.UseShellExecute = $false
                 
-                    Write-Host "Starting MakeMKV HTTP Server"
-                    $Process.Start() | Out-Null
-                    Start-Sleep -Seconds 2
+                Write-Host "Starting MakeMKV HTTP Server"
+                $Process.StartInfo.Arguments | Write-Host -ForegroundColor Green
 
-                    $server = $null
+                $Process.Start() | Out-Null
+                Start-Sleep -Seconds 10
 
-                    do
-                    {
-                        $msg = $Process.StandardOutput.ReadLine() | Select-String -Pattern 'MSG:4500.*?address is (.*?) or'
+                $server = $null
+
+                do
+                {
+                    $msg = $Process.StandardOutput.ReadLine()
+                    $stream = $msg | Select-String -Pattern 'MSG:4500.*?address is (.*?) or'
         
-                        if ($msg -ne $null -and $msg.Matches.Count -gt 0) {
-                            $server = $msg.Matches.Captures.Groups[1].Value
-                            break
-                        }
-
+                    if ($stream -ne $null -and $stream.Matches.Count -gt 0) {
+                        $server = $stream.Matches.Captures.Groups[1].Value
+                        break
                     }
-                    while (!$Process.StandardOutput.EndOfStream)
+                }
+                while ($Process.HasExited -ne $true)
                     
-                    $server | Write-Host -ForegroundColor Green
+                $server | Write-Host -ForegroundColor Green
                     
+                Measure-Command {
                     foreach($s in $selected) {
-                        $uri = $server + "/web/title" + $discOpt[$s]["Value"]
+                        $uri = $server + "/web/title" + $discInfoOpt[$s]["Value"]
                         $req = Invoke-WebRequest -Uri $uri
                         $file = [regex]::Match($req.RawContent, '.*?file\d+.*?"(.*?)"')
 
                         if ($file -and $file.Groups.Count -gt 0) {
-                            Start-FFmpeg $FFmpeg $file.Groups[1].Value $discInfo["Disc"][$DISC_TITLE_SHORT] $discInfo["Title"][$discOpt[$s]["Value"]][$TITLE_NAME].Split(".")[0]
+                            Start-FFmpeg $FFmpeg $file.Groups[1].Value $discInfo["Disc"][$DISC_TITLE_SHORT] $discInfo["Title"][$discInfoOpt[$s]["Value"]][$TITLE_NAME].Split(".")[0]
                         }
                         else {
                             Write-Host "Could not find file to convert."
