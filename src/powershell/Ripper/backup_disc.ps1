@@ -294,9 +294,9 @@ function Start-Ripping {
                     }
                 }
                 while ($Process.HasExited -ne $true)
-                    
+
                 $server | Write-Host -ForegroundColor Green
-                    
+
                 Measure-Command {
                     foreach($s in $selected) {
                         $uri = $server + "/web/title" + $discInfoOpt[$s]["Value"]
