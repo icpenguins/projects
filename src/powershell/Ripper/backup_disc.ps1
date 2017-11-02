@@ -1,6 +1,7 @@
 ﻿# Copyright (c) 4252 Concepts and contributors. All rights reserved. Licensed under the Microsoft Reciprocal License. See LICENSE.TXT file in the project root for full license information.
 
 param(
+    $Disc = $null,
     $MakeMKVPath = ${env:ProgramFiles(x86)} + "\MakeMKV\makemkvcon64.exe",
     $FFmpegPath = ${env:ProgramFiles} + "\FFmpeg\bin\ffmpeg.exe"
 )
@@ -105,23 +106,19 @@ function Get-DiscInfoOptions {
     )
 
     $options = [ordered]@{ 0 = @{Select = "&Cancel"; Text = "Cancel the operation"; Value = "-1"; };
-                           1 = @{Select = "&Reset"; Text = "Reset the selections"; Value = "-2"; };
-                           2 = @{Select = "&Go"; Text = "Selections good to go"; Value = "-3"; } }
+                           1 = @{Select = "&Reset"; Text = "Reset the selections"; Value = "-2";  };
+                           2 = @{Select = "&Go"; Text = "Selections good to go"; Value = "-3";    };
+                           3 = @{Select = "&All"; Text = "Copy all"; Value = "-4";                }; }
 
-    $i = 3
+    $i = 4
     foreach ($key in $Info["Title"].Keys) {
         $index = [int]$key
         $item = $Info["Title"][$key]
 
-        if ($index -lt 10) {
-            $optSelect = "Title &{0} - {2} {3}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE]
-            $optText = "Title {0}: Chapters ({1}) {2} {3} {4} - {5}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item["Details"][$VIDEO_STREAM][$VIDEO_STREAM_RATO], $item[$TITLE_NAME]
+        $optSelect = "Title &{0} - {2} {3}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE]
+        $optText = "Title {0}: Chapters ({1}) {2} {3} {4} - {5}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item["Details"][$VIDEO_STREAM][$VIDEO_STREAM_RATO], $item[$TITLE_NAME]
 
-            $options.Add($i, @{Select = $optSelect; Text = $optText; Value = $key})
-        }
-        else {
-            "SKIPPING: Title {0} Chapters ({1}) {2} {3} {4} - {5}" -f $key, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item["Details"][$VIDEO_STREAM][$VIDEO_STREAM_RATO], $item[$TITLE_NAME] | Write-Host -ForegroundColor Yellow
-        }
+        $options.Add($i, @{Select = $optSelect; Text = $optText; Value = $key})
 
         $i++
     }
@@ -164,12 +161,7 @@ function Print-Titles {
     foreach($index in $DiscInfo["Title"].Keys) {
         $item = $DiscInfo["Title"][$index]
 
-        if ($i -lt 10) {
-            "Title {0}: Chapters ({1}) {2} {3} {4} - {5}" -f $index, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item["Details"][$VIDEO_STREAM][$VIDEO_STREAM_RATO], $item[$TITLE_NAME] | Write-Host -ForegroundColor Green
-        }
-        else {
-            "SKIPPING: Title {0}: Chapters ({1}) {2} {3} {4} - {5}" -f $index, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item["Details"][$VIDEO_STREAM][$VIDEO_STREAM_RATO], $item[$TITLE_NAME] | Write-Debug
-        }
+        "Title {0}: Chapters ({1}) {2} {3} {4} - {5}" -f $index, $item[$TITLE_CHAPTERS], $item[$TITLE_TIME], $item[$TITLE_SIZE], $item["Details"][$VIDEO_STREAM][$VIDEO_STREAM_RATO], $item[$TITLE_NAME] | Write-Host -ForegroundColor Green
 
         $i++
     }
@@ -213,7 +205,14 @@ function Start-FFmpeg {
     $time = Get-Date
     "FFmpeg started at {0}" -f $time | Write-Host
 
-    Measure-Command { &$FFmpeg -hide_banner -hwaccel dxva2 -y -i $Path -c:v h264_nvenc -preset slow -level 5.1 -profile:v high -2pass 1 -qdiff 9 -qmin 14 -qmax 24 -minrate 1000k -maxrate 27000k -b:v 6400k -c:a copy -scodec copy $newName| Out-Host }
+    #Write-Host "Intel Accel" | Write-Host -ForegroundColor Green
+    #Measure-Command { &$FFmpeg -hide_banner -hwaccel dxva2 -y -i $Path -c:v h264_nvenc -preset slow -level 5.1 -profile:v high -2pass 1 -qdiff 9 -qmin 16 -qmax 26 -minrate 1000k -maxrate 27000k -b:v 4000k -c:a copy -scodec copy $newName| Out-Host }
+
+    Write-Host "Nvidia Accel" | Write-Host -ForegroundColor Green
+    Measure-Command { &$FFmpeg -hide_banner -hwaccel cuvid -y -i $Path -c:v h264_nvenc -preset slow -level 5.1 -profile:v high -2pass 1 -qdiff 9 -qmin 16 -qmax 26 -minrate 1000k -maxrate 27000k -b:v 4000k -c:a copy -scodec copy -max_muxing_queue_size 512 $newName| Out-Host }
+
+    #Write-Host "Mapped" | Write-Host -ForegroundColor Green
+    #Measure-Command { &$FFmpeg -hide_banner -hwaccel cuvid -y -i $Path -map 0:0 -map 0:2 -map 0:6 -c:v h264_nvenc -preset slow -level 5.1 -profile:v high -2pass 1 -qdiff 9 -qmin 16 -qmax 26 -minrate 1000k -maxrate 27000k -b:v 4000k -c:a copy -scodec copy $newName| Out-Host }
 }
 
 function Start-Ripping {
@@ -227,19 +226,24 @@ function Start-Ripping {
     $rMakeMKV = Prompt-General -Title "" -Message "Do you want to rip a disc with MakeMKV?" -Choices $rMakeOpt
 
     if ($rMakeMKV -eq 0) {
-        "MakeMKV path '{0}'" -f $MakeMKV | Write-Host -ForegroundColor Gree
-        "FFmpeg path '{0}'" -f $FFmpeg | Write-Host -ForegroundColor Gree
+        "MakeMKV path '{0}'" -f $MakeMKV | Write-Host -ForegroundColor Green
+        "FFmpeg path '{0}'" -f $FFmpeg | Write-Host -ForegroundColor Green
 
-        $discOpt = Get-AvailableDrives -Path $MakeMKV
+        if ($Disc -eq $null) {
+            $discOpt = Get-AvailableDrives -Path $MakeMKV
 
-        $rDisc = Prompt-General -Title "Choose Drive for MakeMKV" -Message "Which drive would you like to use?" -Choices $discOpt -DefaultChoice 1
+            $rDisc = Prompt-General -Title "Choose Drive for MakeMKV" -Message "Which drive would you like to use?" -Choices $discOpt -DefaultChoice 1
+        } else {
+            $rDisc = 1
+        }
 
         if ($rDisc -ne 0) {
             $rTitle = 0
+            $selDisc = if ($Disc -eq $null){ $discOpt[$rDisc]["Value"] } else { $Disc }
             $done = $false
             $selected = New-Object System.Collections.ArrayList
 
-            $discInfo = Get-DiscInfo -Path $MakeMKV -Disc $discOpt[$rDisc]["Value"]
+            $discInfo = Get-DiscInfo -Path $MakeMKV -Disc $selDisc
 
             Print-Titles $discInfo
 
@@ -257,7 +261,21 @@ function Start-Ripping {
                 elseif ($rTitle -eq 2) {
                     $done = $true
                 }
-                elseif ($rTitle -gt 2){
+                elseif ($rTitle -eq 3) {
+                    $optCount = 0
+
+                    foreach ($selectAll in $discInfoOpt.Keys) {
+
+                        if ($optCount -gt 3 -and !$selected.Contains($optCount)) {
+                            $selected.Add($optCount) | Out-Null
+                        }
+
+                        $optCount++
+                    }
+
+                    Print-TitleSelected $discInfoOpt $selected
+                }
+                elseif ($rTitle -gt 3){
                     if (!$selected.Contains($rTitle)) {
                         $selected.Add($rTitle) | Out-Null
                     }
@@ -270,7 +288,7 @@ function Start-Ripping {
                 $Process = new-Object System.Diagnostics.Process
                 $Process.StartInfo.CreateNoWindow = $true
                 $Process.StartInfo.FileName = $MakeMKV
-                $Process.StartInfo.Arguments = "-r stream --noscan disc:" + $discOpt[$rDisc]["Value"] + " --bindport=5100" + $discOpt[$rDisc]["Value"]
+                $Process.StartInfo.Arguments = "-r stream --noscan disc:" + $selDisc + " --bindport=5100" + $selDisc
                 $Process.StartInfo.RedirectStandardOutput = $true
                 $Process.StartInfo.RedirectStandardError = $true
                 $Process.StartInfo.UseShellExecute = $false
