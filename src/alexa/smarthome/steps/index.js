@@ -85,16 +85,18 @@ exports.handler = function (request, context) {
                 "uncertaintyInMilliseconds": 50
             }]
         };
-        var responseHeader = request.directive.header;
-        responseHeader.name = "Alexa.Response";
-        responseHeader.messageId = responseHeader.messageId + "-R";
         var response = {
             context: contextResult,
             event: {
-                header: responseHeader
+                header: {
+                    namespace: "Alexa",
+                    name: "Response",
+                    payloadVersion: "3",
+                    messageId: request.directive.header.messageId + "-R"
+                },
+                payload: {}
             },
-            payload: {}
-
+            endpoint: request.directive.endpoint
         };
         log("DEBUG", "Alexa.PowerController ", JSON.stringify(response));
         context.succeed(response);
