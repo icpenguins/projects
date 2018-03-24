@@ -8,6 +8,8 @@ exports.handler = function (request, context) {
             log("DEBUG:", "TurnOn or TurnOff Request", JSON.stringify(request));
             handlePowerControl(request, context);
         }
+    } else {
+        log("DEBUG:", "Unknown request",  JSON.stringify(request));
     }
 
     function handleDiscovery(request, context) {
