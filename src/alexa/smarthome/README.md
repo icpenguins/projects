@@ -112,6 +112,25 @@ The difference is the payload no longer carries the `request.directive.payload.s
     }
 }
 ```
+#### TurnOn
+```js
+{
+  "directive": {
+    "header": {
+      "payloadVersion": "3",
+      "namespace": "Alexa.PowerController",
+      "name": "TurnOn",
+      "messageId": "E2D17F2F-EBD0-4B1F-BB1E-8CEE81ADCBBC"
+    },
+    "payload": {},
+    "endpoint": {
+      "scope": {
+        "token": true
+      }
+    }
+  }
+}
+```
 #### StateReport
 ```js
 {
