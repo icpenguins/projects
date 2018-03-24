@@ -8,7 +8,15 @@ exports.handler = function (request, context) {
             log("DEBUG:", "TurnOn or TurnOff Request", JSON.stringify(request));
             handlePowerControl(request, context);
         }
-    } else {
+    } else if (request.directive.header.namespace === 'Alexa') {
+        // This is required to allow Alexa to know the current state of the device
+        // It keeps the message "Server is unreponsive." from being displayed
+        if (request.directive.header.name === 'ReportState') {
+            log("DEBUG:", "ReportState Request ", JSON.stringify(request));
+            handleReportState(request, context);
+        }
+    }
+    else {
         log("DEBUG:", "Unknown request",  JSON.stringify(request));
     }
 
@@ -101,6 +109,36 @@ exports.handler = function (request, context) {
             endpoint: request.directive.endpoint
         };
         log("DEBUG", "Alexa.PowerController ", JSON.stringify(response));
+        context.succeed(response);
+    }
+
+    function handleReportState(request, context) {
+        let response = {
+            context: {
+                properties: [
+                    {
+                        namespace: "Alexa.PowerController",
+                        name: "powerState",
+                        value: "OFF",
+                        timeOfSample: new Date(Date.now()).toJSON(),
+                        uncertaintyInMilliseconds: 500
+                    }
+                ]
+            },
+            event: {
+                header: {
+                    namespace: "Alexa",
+                    name: "StateReport",
+                    payloadVersion: "3",
+                    messageId: request.directive.header.messageId + "-S",
+                    correlationToken: request.directive.header.correlationToken
+                },
+                endpoint: request.directive.endpoint,
+                payload: {}
+            }
+        };
+
+        log("DEBUG", "StateReport ", JSON.stringify(response));
         context.succeed(response);
     }
 };
