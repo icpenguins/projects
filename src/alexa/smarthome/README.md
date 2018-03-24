@@ -2,7 +2,7 @@
 ## Following ["Steps to Build a Smart Home Skill"](https://developer.amazon.com/docs/smarthome/steps-to-build-a-smart-home-skill.html)
 
 1. Followed the directions to the "Finish configuring and test the Lambda function"
-    * Found documentation bug
+    * Found documentation bug while running test as TypeError was thrown
     * Lambda function details are incorrect for non-discovery request `request.directive.payload.scope.token` (see below)
 2. Fixed documentation bug and built Lambda tests listed below (see "Lambda Tests")
 3. Tests pass using the function console
@@ -31,6 +31,7 @@
 ### QUICK DEBUGGING
 * Use the Amazon CloudWatch to determine the requests packages from the Alexa device
 * Use the Alexa Skill Kit test "Alexa Simulator"
+* [Validation Schemas](https://github.com/alexa/alexa-smarthome/wiki/Validation-Schemas)
 
 ### Finish configuring and test the Lambda function ([link](https://developer.amazon.com/docs/smarthome/steps-to-build-a-smart-home-skill.html#finish-configuring-and-test-the-lambda-function))
 #### Example Expects
