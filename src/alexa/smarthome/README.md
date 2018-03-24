@@ -14,6 +14,13 @@
         * https://github.com/alexa/alexa-smarthome/tree/master/sample_messages/PowerController
 5. "Bedroom Outlet" now turns on and off via voice command
     * However the Alexa app on iOS shows a "Server is unresponsive." banner when the "Bedroom Outlet" is selected (see "Screenshot #1")
+    * Update Lambda to have an else case for an "Unknown request"
+        * Found that Alexa is doing a "ReportState" request and no answer is delivered with current Lambda script
+        * Found expected response for "ReportState" at ["Alexa Interface"](https://developer.amazon.com/docs/device-apis/alexa-interface.html#statereport)
+    * Added function to handle a state report request
+        * Additional work would be required to generate a state engine for the demo and is not currently done
+        * The state report will always return "OFF" at this time until a state engine is implemented
+6. After addition of code for the state report the Alexa app functions as expected
 
 ### NOTES
 * Under Payload Version, select v3. You can no longer create new skills that that target v2.
@@ -96,18 +103,41 @@ The difference is the payload no longer carries the `request.directive.payload.s
         "name": "TurnOff",
         "messageId": "E2D17F2F-EBD0-4B1F-BB1E-8CEE81ADCBBC"
       },
-      "payload": {
-            "appliance": {
-              "additionalApplianceDetails": {},
-              "applianceId": "unique-id-for-non-dimmable-bulb-specific-to-user1"
-            }
-        },
+      "payload": { },
         "endpoint": {
             "scope": {
                 "token": true
             }
         }
     }
+}
+```
+#### StateReport
+```js
+{
+  "directive": {
+    "header": {
+      "namespace": "Alexa",
+      "name": "ReportState",
+      "payloadVersion": "3",
+      "messageId": "766c3eed-2ad1-4f11-ad29-14263ce669b8",
+      "correlationToken": "token"
+    },
+    "endpoint": {
+      "scope": {
+        "type": "BearerToken",
+        "token": "TOKEN"
+      },
+      "endpointId": "demo_id",
+      "cookie": {
+        "key1": "arbitrary key/value pairs for skill to reference this endpoint.",
+        "key2": "There can be multiple entries",
+        "key3": "but they should only be used for reference purposes.",
+        "key4": "This is not a suitable place to maintain current endpoint state."
+      }
+    },
+    "payload": {}
+  }
 }
 ```
 
