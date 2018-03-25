@@ -23,6 +23,7 @@
 6. After addition of code for the state report the Alexa app functions as expected
 
 ### NOTES
+* The "blueprint alexa-smart-home-skill-adapter" is v2 rather than v3 and should not be used
 * Under Payload Version, select v3. You can no longer create new skills that that target v2.
 * No link provided: "This name is appears in the AWS console and is also returned by the AWS command line interface (CLI)"
     * [https://docs.aws.amazon.com/cli/latest/userguide/installing.html](https://docs.aws.amazon.com/cli/latest/userguide/awscli-install-windows.html)
