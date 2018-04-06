@@ -79,7 +79,7 @@ function handlePowerControl(request, context) {
     // get device ID passed in during discovery
     var requestMethod = request.directive.header.name
     // get user token pass in request
-    var requestToken = request.directive.endpoint.scope.token
+    // var requestToken = request.directive.endpoint.scope.token
     var powerResult
 
     if (requestMethod === 'TurnOn') {
