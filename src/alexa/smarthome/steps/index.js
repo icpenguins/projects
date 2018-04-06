@@ -132,7 +132,7 @@ function log(message, message1, message2) {
 exports.handler = function (request, context) {
     if (request.directive.header.namespace === 'Alexa.Discovery' && request.directive.header.name === 'Discover') {
         log('DEBUG:', 'Discover request',  JSON.stringify(request))
-        handleDiscovery(request, context, '')
+        handleDiscovery(request, context)
     }
     else if (request.directive.header.namespace === 'Alexa.PowerController') {
         if (request.directive.header.name === 'TurnOn' || request.directive.header.name === 'TurnOff') {
