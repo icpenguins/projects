@@ -31,6 +31,100 @@ function buildReportState(req, stateValue) {
     return res
 }
 
+function handleDiscovery(request, context) {
+    var payload = {
+        endpoints:
+        [
+            {
+                endpointId: 'demo_id',
+                manufacturerName: 'Smart Device Company',
+                friendlyName: 'Bedroom Outlet',
+                description: 'Smart Device Switch',
+                displayCategories: ['SWITCH'],
+                cookie: {
+                    key1: 'arbitrary key/value pairs for skill to reference this endpoint.',
+                    key2: 'There can be multiple entries',
+                    key3: 'but they should only be used for reference purposes.',
+                    key4: 'This is not a suitable place to maintain current endpoint state.'
+                },
+                capabilities:
+                [
+                    {
+                      type: 'AlexaInterface',
+                      interface: 'Alexa',
+                      version: '3'
+                    },
+                    {
+                        interface: 'Alexa.PowerController',
+                        version: '3',
+                        type: 'AlexaInterface',
+                        properties: {
+                            supported: [{
+                                name: 'powerState'
+                            }],
+                             retrievable: true
+                        }
+                    }
+                ]
+            }
+        ]
+    }
+    var header = request.directive.header
+    header.name = 'Discover.Response'
+    log('DEBUG', 'Discovery Response: ', JSON.stringify({ header: header, payload: payload }))
+    context.succeed({ event: { header: header, payload: payload } })
+}
+
+function handlePowerControl(request, context) {
+    // get device ID passed in during discovery
+    var requestMethod = request.directive.header.name
+    // get user token pass in request
+    var requestToken = request.directive.endpoint.scope.token
+    var powerResult
+
+    if (requestMethod === 'TurnOn') {
+
+        // Make the call to your device cloud for control 
+        // powerResult = stubControlFunctionToYourCloud(endpointId, token, request)
+        powerResult = 'ON'
+    }
+   else if (requestMethod === 'TurnOff') {
+        // Make the call to your device cloud for control and check for success 
+        // powerResult = stubControlFunctionToYourCloud(endpointId, token, request)
+        powerResult = 'OFF'
+    }
+
+    var contextResult = {
+        properties: [{
+            namespace: 'Alexa.PowerController',
+            name: 'powerState',
+            value: powerResult,
+            timeOfSample: '2017-09-03T16:20:50.52Z', //retrieve from result.
+            uncertaintyInMilliseconds: 50
+        }]
+    }
+
+    var response = {
+        context: contextResult,
+        event: {
+            header: {
+                namespace: 'Alexa',
+                name: 'Response',
+                payloadVersion: '3',
+                messageId: request.directive.header.messageId + '-R'
+            },
+            payload: {}
+        },
+        endpoint: request.directive.endpoint
+    }
+    log('DEBUG', 'Alexa.PowerController ', JSON.stringify(response))
+    context.succeed(response)
+}
+
+function handleReportState(request, context) {
+    context.succeed(buildReportState(request, 'OFF'))
+}
+
 function log(message, message1, message2) {
     console.log(message + message1 + message2)
 }
@@ -55,99 +149,5 @@ exports.handler = function (request, context) {
     }
     else {
         log('DEBUG:', 'Unknown request',  JSON.stringify(request))
-    }
-
-    function handleDiscovery(request, context) {
-        var payload = {
-            endpoints:
-            [
-                {
-                    endpointId: 'demo_id',
-                    manufacturerName: 'Smart Device Company',
-                    friendlyName: 'Bedroom Outlet',
-                    description: 'Smart Device Switch',
-                    displayCategories: ['SWITCH'],
-                    cookie: {
-                        key1: 'arbitrary key/value pairs for skill to reference this endpoint.',
-                        key2: 'There can be multiple entries',
-                        key3: 'but they should only be used for reference purposes.',
-                        key4: 'This is not a suitable place to maintain current endpoint state.'
-                    },
-                    capabilities:
-                    [
-                        {
-                          type: 'AlexaInterface',
-                          interface: 'Alexa',
-                          version: '3'
-                        },
-                        {
-                            interface: 'Alexa.PowerController',
-                            version: '3',
-                            type: 'AlexaInterface',
-                            properties: {
-                                supported: [{
-                                    name: 'powerState'
-                                }],
-                                 retrievable: true
-                            }
-                        }
-                    ]
-                }
-            ]
-        }
-        var header = request.directive.header
-        header.name = 'Discover.Response'
-        log('DEBUG', 'Discovery Response: ', JSON.stringify({ header: header, payload: payload }))
-        context.succeed({ event: { header: header, payload: payload } })
-    }
-
-    function handlePowerControl(request, context) {
-        // get device ID passed in during discovery
-        var requestMethod = request.directive.header.name
-        // get user token pass in request
-        var requestToken = request.directive.endpoint.scope.token
-        var powerResult
-
-        if (requestMethod === 'TurnOn') {
-
-            // Make the call to your device cloud for control 
-            // powerResult = stubControlFunctionToYourCloud(endpointId, token, request)
-            powerResult = 'ON'
-        }
-       else if (requestMethod === 'TurnOff') {
-            // Make the call to your device cloud for control and check for success 
-            // powerResult = stubControlFunctionToYourCloud(endpointId, token, request)
-            powerResult = 'OFF'
-        }
-
-        var contextResult = {
-            properties: [{
-                namespace: 'Alexa.PowerController',
-                name: 'powerState',
-                value: powerResult,
-                timeOfSample: '2017-09-03T16:20:50.52Z', //retrieve from result.
-                uncertaintyInMilliseconds: 50
-            }]
-        }
-
-        var response = {
-            context: contextResult,
-            event: {
-                header: {
-                    namespace: 'Alexa',
-                    name: 'Response',
-                    payloadVersion: '3',
-                    messageId: request.directive.header.messageId + '-R'
-                },
-                payload: {}
-            },
-            endpoint: request.directive.endpoint
-        }
-        log('DEBUG', 'Alexa.PowerController ', JSON.stringify(response))
-        context.succeed(response)
-    }
-
-    function handleReportState(request, context) {
-        context.succeed(buildReportState(request, 'OFF'))
     }
 }
