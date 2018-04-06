@@ -32,47 +32,54 @@ function buildReportState(req, stateValue) {
 }
 
 function handleDiscovery(request, context) {
-    var payload = {
-        endpoints:
-        [
-            {
-                endpointId: 'demo_id',
-                manufacturerName: 'Smart Device Company',
-                friendlyName: 'Bedroom Outlet',
-                description: 'Smart Device Switch',
-                displayCategories: ['SWITCH'],
-                cookie: {
-                    key1: 'arbitrary key/value pairs for skill to reference this endpoint.',
-                    key2: 'There can be multiple entries',
-                    key3: 'but they should only be used for reference purposes.',
-                    key4: 'This is not a suitable place to maintain current endpoint state.'
-                },
-                capabilities:
-                [
-                    {
-                      type: 'AlexaInterface',
-                      interface: 'Alexa',
-                      version: '3'
-                    },
-                    {
-                        interface: 'Alexa.PowerController',
-                        version: '3',
-                        type: 'AlexaInterface',
-                        properties: {
-                            supported: [{
-                                name: 'powerState'
-                            }],
-                             retrievable: true
-                        }
+    let response = {
+        event: {
+            header: {
+                messageId: request.directive.header.messageId,
+                name: 'Alexa.Discovery',
+                namespace: request.directive.header.namespace,
+                payload: '3'
+            },
+            payload: {
+                endpoints: [ {
+                        endpointId: 'demo_id',
+                        manufacturerName: 'Smart Device Company',
+                        friendlyName: 'Bedroom Outlet',
+                        description: 'Smart Device Switch',
+                        displayCategories: ['SWITCH'],
+                        cookie: {
+                            key1: 'arbitrary key/value pairs for skill to reference this endpoint.',
+                            key2: 'There can be multiple entries',
+                            key3: 'but they should only be used for reference purposes.',
+                            key4: 'This is not a suitable place to maintain current endpoint state.'
+                        },
+                        capabilities:
+                        [
+                            {
+                            type: 'AlexaInterface',
+                            interface: 'Alexa',
+                            version: '3'
+                            },
+                            {
+                                interface: 'Alexa.PowerController',
+                                version: '3',
+                                type: 'AlexaInterface',
+                                properties: {
+                                    supported: [{
+                                        name: 'powerState'
+                                    }],
+                                    retrievable: true
+                                }
+                            }
+                        ]
                     }
                 ]
             }
-        ]
+        }
     }
-    var header = request.directive.header
-    header.name = 'Discover.Response'
-    log('DEBUG', 'Discovery Response: ', JSON.stringify({ header: header, payload: payload }))
-    context.succeed({ event: { header: header, payload: payload } })
+
+    log('DEBUG:', ' Discovery Response: ', JSON.stringify(response))
+    context.succeed(response)
 }
 
 function handlePowerControl(request, context) {
@@ -83,7 +90,6 @@ function handlePowerControl(request, context) {
     var powerResult
 
     if (requestMethod === 'TurnOn') {
-
         // Make the call to your device cloud for control 
         // powerResult = stubControlFunctionToYourCloud(endpointId, token, request)
         powerResult = 'ON'
