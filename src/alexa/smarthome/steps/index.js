@@ -1,3 +1,38 @@
+function buildReportState(req, stateValue) {
+    let res = {
+        context: {
+            properties: [
+                {
+                    namespace: 'Alexa.PowerController',
+                    name: 'powerState',
+                    value: stateValue,
+                    timeOfSample: new Date(Date.now()).toJSON(),
+                    uncertaintyInMilliseconds: 500
+                }
+            ]
+        },
+        event: {
+            header: {
+                namespace: 'Alexa',
+                name: 'StateReport',
+                payloadVersion: '3',
+                messageId: req.directive.header.messageId + '-S',
+                correlationToken: req.directive.header.correlationToken
+            },
+            endpoint: req.directive.endpoint,
+            payload: {}
+        }
+    }
+
+    log('DEBUG: ', ' STATEREPORT: ', JSON.stringify(res))
+
+    return res
+}
+
+function log(message, message1, message2) {
+    console.log(message + message1 + message2);
+}
+
 exports.handler = function (request, context) {
     if (request.directive.header.namespace === 'Alexa.Discovery' && request.directive.header.name === 'Discover') {
         log("DEBUG:", "Discover request",  JSON.stringify(request));
@@ -64,10 +99,6 @@ exports.handler = function (request, context) {
         context.succeed({ event: { header: header, payload: payload } });
     }
 
-    function log(message, message1, message2) {
-        console.log(message + message1 + message2);
-    }
-
     function handlePowerControl(request, context) {
         // get device ID passed in during discovery
         var requestMethod = request.directive.header.name;
@@ -113,32 +144,6 @@ exports.handler = function (request, context) {
     }
 
     function handleReportState(request, context) {
-        let response = {
-            context: {
-                properties: [
-                    {
-                        namespace: "Alexa.PowerController",
-                        name: "powerState",
-                        value: "OFF",
-                        timeOfSample: new Date(Date.now()).toJSON(),
-                        uncertaintyInMilliseconds: 500
-                    }
-                ]
-            },
-            event: {
-                header: {
-                    namespace: "Alexa",
-                    name: "StateReport",
-                    payloadVersion: "3",
-                    messageId: request.directive.header.messageId + "-S",
-                    correlationToken: request.directive.header.correlationToken
-                },
-                endpoint: request.directive.endpoint,
-                payload: {}
-            }
-        };
-
-        log("DEBUG", "StateReport ", JSON.stringify(response));
-        context.succeed(response);
+        context.succeed(buildReportState(request, 'OFF'))
     }
 };
