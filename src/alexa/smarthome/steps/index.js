@@ -94,18 +94,16 @@ function handlePowerControl(request, context) {
         powerResult = 'OFF'
     }
 
-    var contextResult = {
-        properties: [{
-            namespace: 'Alexa.PowerController',
-            name: 'powerState',
-            value: powerResult,
-            timeOfSample: '2017-09-03T16:20:50.52Z', //retrieve from result.
-            uncertaintyInMilliseconds: 50
-        }]
-    }
-
     var response = {
-        context: contextResult,
+        context: {
+            properties: [{
+                namespace: 'Alexa.PowerController',
+                name: 'powerState',
+                value: powerResult,
+                timeOfSample: '2017-09-03T16:20:50.52Z', //retrieve from result.
+                uncertaintyInMilliseconds: 50
+            }],
+        },
         event: {
             header: {
                 namespace: 'Alexa',
