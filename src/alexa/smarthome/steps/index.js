@@ -1,3 +1,5 @@
+'use strict'
+
 function buildReportState(req, stateValue) {
     let res = {
         context: {
