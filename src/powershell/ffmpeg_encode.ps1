@@ -22,13 +22,21 @@
     Test the settings by outputting the first 3 minutes of the video.
 
     .EXAMPLE
-    C:\PS> .\encode.ps1 -InputName C:\MKVPath\ -Process 0 -Hardware
+    Produces a medium quality output file.
+
+    C:\PS> .\ffmpeg_encode.ps1 -InputName C:\MKVPath\video.mkv
 
     .EXAMPLE
-    C:\PS> .\encode.ps1 -InputName C:\MKVPath\ -Process 1 -Hardware
+    Allows alternate input processing from a directory. Running two different powershell commands will,
+    effectively, thread the processing.
+
+    WINDOW 1: C:\PS> .\ffmpeg_encode.ps1 -InputName C:\MKVPath\ -Process 0
+    WINDOW 2: C:\PS> .\ffmpeg_encode.ps1 -InputName C:\MKVPath\ -Process 1
 
     .EXAMPLE
-    C:\PS> .\encode.ps1 -InputName C:\MKVPath\video.mkv -Hardware
+    Produces a cropped 2.35:1 3 minute long clip.
+
+    C:\PS> .\ffmpeg_encode.ps1 -InputName C:\MKVPath\video.mkv -Crop 2.35:1 -Test
 #>
 param (
     [ValidateSet('2.35:1')]
@@ -99,25 +107,24 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
                 throw [System.ArgumentOutOfRangeException] "The cropping value was incorrect."
             }
         }
-        
     }
 
     switch ($Quality) {
         "low" {
-            $cmd += '-qmin 4 -qmax 26 '
+            $cmd += '-qmin 20 -qmax 28 -level 3 '
             break;
         }
         "medium" {
-            $cmd += '-qmin 2 -qmax 24 '
+            $cmd += '-qmin 2 -qmax 24 -level 4.2 '
             break;
         }
         "high" {
-            $cmd += '-qmin 0 -qmax 19 '
+            $cmd += '-qmin 0 -qmax 19 -level 4.2 '
             break;
         }
     }
 
-    $cmd += '-pix_fmt yuv420p -coder 1 -c:v h264_nvenc -preset llhq -profile:v high -level 4.2 -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
+    $cmd += '-pix_fmt yuv420p -coder 1 -c:v h264_nvenc -preset slow -profile:v high -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
     $cmd = $ExecutionContext.InvokeCommand.ExpandString($cmd)
     Write-Host $cmd
 
