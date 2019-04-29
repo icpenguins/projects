@@ -8,6 +8,13 @@
     .DESCRIPTION
     Use this script to further compress MKV files.
 
+    .PARAMETER Crop
+    The aspect ratio to crop the video. There is no logic behind this so it might be needed to detect the correct
+    crop with the -vf "cropdetect" command first.
+
+    2.35:1_800 = 1920:800:0:140
+    2.35:1_816 = 1920:816:0:132
+
     .PARAMETER FFmpegPath
     A location for FFMpeg other than ${env:ProgramFiles} + "\FFmpeg\bin\ffmpeg.exe"
 
@@ -39,7 +46,7 @@
     C:\PS> .\ffmpeg_encode.ps1 -InputName C:\MKVPath\video.mkv -Crop 2.35:1 -Test
 #>
 param (
-    [ValidateSet('2.35:1')]
+    [ValidateSet('2.35:1_800', '2.35:1_816')]
     $Crop,
     $FFmpegPath = ${env:ProgramFiles} + "\FFmpeg\bin\ffmpeg.exe",
     $InputName,
@@ -97,9 +104,15 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
         $cmd += '-t 00:03:00 '
     }
 
+    # Use the following command to determine the type of cropping required if not already known.
+    # -vf "cropdetect"
     if ($null -ne $Crop) {
         switch ($crop) {
-            "2.35:1" {
+            "2.35:1_800" {
+                $cmd += '-vf "crop=1920:800:0:140" '
+                break;
+            }
+            "2.35:1_816" {
                 $cmd += '-vf "crop=1920:816:0:132" '
                 break;
             }
