@@ -141,7 +141,7 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
     $cmd = $ExecutionContext.InvokeCommand.ExpandString($cmd)
     Write-Host $cmd
 
-    Invoke-Expression "& $cmd"
+    Measure-Command { Invoke-Expression "& $cmd" }
 
     [console]::beep(300,200)
 }
