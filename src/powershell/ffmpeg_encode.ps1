@@ -28,6 +28,14 @@
     .PARAMETER Test
     Test the settings by outputting the first 3 minutes of the video.
 
+    .PARAMETER UseDevice
+    Specify which hardware device (GPU) number to use. This is typcially selected from a zero-based array.
+
+    How to get a list of hardware devices:
+    https://stackoverflow.com/questions/40424350/how-to-specify-the-gpu-to-be-used-by-nvenc-in-ffmpeg
+    
+    & "c:\Program Files\FFmpeg\bin\ffmpeg.exe" -f lavfi -i nullsrc -c:v h264_nvenc -gpu list -f null -
+
     .EXAMPLE
     Produces a medium quality output file.
 
@@ -55,7 +63,10 @@ param (
     $Process = -1,
     [ValidateSet('low', 'medium', 'high')]
     $Quality = "medium",
-    [switch]$Test
+    [switch]$Test,
+    [ValidateRange(-1,5)]
+    [Int]
+    $UseDevice = -1
 )
 
 $list
@@ -97,8 +108,16 @@ for ($i = 0; $i -lt $dir.Length; $i++) {
 
 for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
     Write-Host "In: " $list[$i] " Out: " $list[$i + 1]
+    $hwDev = ''
 
-    $cmd = '"$FFmpegPath" -hide_banner -hwaccel cuda -y -probesize 60000000 -analyzeduration 340000000 -fix_sub_duration -i "$($list[$i])"'
+    $cmd = '"$FFmpegPath" -hide_banner -hwaccel cuda '
+
+    if ($UseGPU -ne -1) {
+        $cmd += '-hwaccel_device $UseDevice '
+        $hwDev = '-gpu $UseDevice '
+    }
+
+    $cmd += '-y -probesize 60000000 -analyzeduration 340000000 -fix_sub_duration -i "$($list[$i])"'
 
     if ($Test.IsPresent) {
         $cmd += '-t 00:03:00 '
@@ -137,7 +156,7 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
         }
     }
 
-    $cmd += '-pix_fmt yuv420p -coder 1 -c:v h264_nvenc -preset slow -profile:v high -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
+    $cmd += '-pix_fmt yuv420p -coder 1 -c:v h264_nvenc $hwDev-preset slow -profile:v high -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
     $cmd = $ExecutionContext.InvokeCommand.ExpandString($cmd)
     Write-Host $cmd
 
