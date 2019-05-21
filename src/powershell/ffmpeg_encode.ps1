@@ -33,7 +33,7 @@
 
     How to get a list of hardware devices:
     https://stackoverflow.com/questions/40424350/how-to-specify-the-gpu-to-be-used-by-nvenc-in-ffmpeg
-    
+
     & "c:\Program Files\FFmpeg\bin\ffmpeg.exe" -f lavfi -i nullsrc -c:v h264_nvenc -gpu list -f null -
 
     .EXAMPLE
@@ -112,7 +112,7 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
 
     $cmd = '"$FFmpegPath" -hide_banner -hwaccel cuda '
 
-    if ($UseGPU -ne -1) {
+    if (-1 -lt $UseDevice) {
         $cmd += '-hwaccel_device $UseDevice '
         $hwDev = '-gpu $UseDevice '
     }
