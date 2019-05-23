@@ -112,13 +112,11 @@ for ($i = 0; $i -lt $dir.Length; $i++) {
 
 for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
     Write-Host "In: " $list[$i] " Out: " $list[$i + 1]
-    $hwDev = ''
 
     $cmd = '"$FFmpegPath" -hide_banner -hwaccel cuda '
 
     if (-1 -lt $UseDevice) {
         $cmd += '-hwaccel_device $UseDevice '
-        $hwDev = '-gpu $UseDevice '
     }
 
     $cmd += '-y -probesize 60000000 -analyzeduration 340000000 -fix_sub_duration -i "$($list[$i])" '
@@ -147,7 +145,7 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
 
     switch ($Quality) {
         "low" {
-            $cmd += '-qmin 20 -qmax 28 '
+            $cmd += '-qmin 23 -qmax 28 '
             break;
         }
         "medium" {
@@ -155,12 +153,18 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
             break;
         }
         "high" {
-            $cmd += '-qmin 10 -qmax 18 '
+            $cmd += '-qmin 8 -qmax 18 '
             break;
         }
     }
 
-    $cmd += '-c:v hevc_nvenc $hwDev-preset slow -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
+    $cmd += '-c:v hevc_nvenc '
+
+    if (-1 -lt $UseDevice) {
+        $cmd += '-gpu $UseDevice '
+    }
+
+    $cmd += '-preset slow -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
     $cmd = $ExecutionContext.InvokeCommand.ExpandString($cmd)
     Write-Host $cmd
 
