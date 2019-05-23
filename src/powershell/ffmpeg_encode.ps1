@@ -52,6 +52,10 @@
     Produces a cropped 2.35:1 3 minute long clip.
 
     C:\PS> .\ffmpeg_encode.ps1 -InputName C:\MKVPath\video.mkv -Crop 2.35:1 -Test
+
+    .EXAMPLE
+    Get Video Stream Size
+    & 'C:\Program Files\FFmpeg\bin\ffprobe.exe' -i 'D:\RIP\RockyIII\enc\Rocky III.mkv' 2>&1 | Select-String -Pattern '(?ims)Stream\s#\d:\d.*?(\d+x\d+).*?$' -all | %{$_.matches} | %{$_.Groups[1].Value}
 #>
 param (
     [ValidateSet('2.35:1_800', '2.35:1_816')]
@@ -117,7 +121,7 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
         $hwDev = '-gpu $UseDevice '
     }
 
-    $cmd += '-y -probesize 60000000 -analyzeduration 340000000 -fix_sub_duration -i "$($list[$i])"'
+    $cmd += '-y -probesize 60000000 -analyzeduration 340000000 -fix_sub_duration -i "$($list[$i])" '
 
     if ($Test.IsPresent) {
         $cmd += '-t 00:03:00 '
@@ -143,20 +147,20 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
 
     switch ($Quality) {
         "low" {
-            $cmd += '-qmin 20 -qmax 28 -level 3 '
+            $cmd += '-qmin 20 -qmax 28 '
             break;
         }
         "medium" {
-            $cmd += '-qmin 2 -qmax 24 -level 4.2 '
+            $cmd += '-qmin 15 -qmax 24 '
             break;
         }
         "high" {
-            $cmd += '-qmin 0 -qmax 19 -level 4.2 '
+            $cmd += '-qmin 10 -qmax 18 '
             break;
         }
     }
 
-    $cmd += '-pix_fmt yuv420p -coder 1 -c:v h264_nvenc $hwDev-preset slow -profile:v high -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
+    $cmd += '-c:v hevc_nvenc $hwDev-preset slow -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
     $cmd = $ExecutionContext.InvokeCommand.ExpandString($cmd)
     Write-Host $cmd
 
