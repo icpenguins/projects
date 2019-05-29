@@ -10,7 +10,7 @@
 
     .PARAMETER Crop
     The aspect ratio to crop the video. There is no logic behind this so it might be needed to detect the correct
-    crop with the -vf "cropdetect" command first.
+    crop with the detect setting first.
 
     2.35:1_800 = 1920:800:0:140
     2.35:1_816 = 1920:816:0:132
@@ -58,7 +58,7 @@
     & 'C:\Program Files\FFmpeg\bin\ffprobe.exe' -i 'D:\RIP\RockyIII\enc\Rocky III.mkv' 2>&1 | Select-String -Pattern '(?ims)Stream\s#\d:\d.*?(\d+x\d+).*?$' -all | %{$_.matches} | %{$_.Groups[1].Value}
 #>
 param (
-    [ValidateSet('2.35:1_800', '2.35:1_816')]
+    [ValidateSet('detect', '2.35:1_800', '2.35:1_816')]
     $Crop,
     $FFmpegPath = ${env:ProgramFiles} + "\FFmpeg\bin\ffmpeg.exe",
     $InputName,
@@ -126,7 +126,6 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
     }
 
     # Use the following command to determine the type of cropping required if not already known.
-    # -vf "cropdetect"
     if ($null -ne $Crop) {
         switch ($crop) {
             "2.35:1_800" {
@@ -136,6 +135,9 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
             "2.35:1_816" {
                 $cmd += '-vf "crop=1920:816:0:132" '
                 break;
+            }
+            "detect" {
+                $cmd += '-vf "cropdetect" '
             }
             Default {
                 throw [System.ArgumentOutOfRangeException] "The cropping value was incorrect."
