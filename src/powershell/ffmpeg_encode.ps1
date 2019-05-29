@@ -25,6 +25,9 @@
     Use a 0 or 1 to process even or odd file counts in a folder. This is good when running two scripts at
     the same time to increase throughput.
 
+    .PARAMETER Spatial
+    Enables Spatial Adaptive Quantization (AQ) (-spatial_aq) to enhance compression (docs\NVENC_VideoEncoder_API_ProgGuide.pdf)
+
     .PARAMETER Test
     Test the settings by outputting the first 3 minutes of the video.
 
@@ -67,6 +70,7 @@ param (
     $Process = -1,
     [ValidateSet('low', 'medium', 'high')]
     $Quality = "medium",
+    [switch]$Spatial,
     [switch]$Test,
     [ValidateRange(-1,5)]
     [Int]
@@ -166,7 +170,11 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
         $cmd += '-gpu $UseDevice '
     }
 
-    $cmd += '-preset slow -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
+    if ($Spatial.IsPresent) {
+        $cmd += '-spatial_aq 1 '
+    }
+
+    $cmd += '-preset slow -rc vbr -2pass 1 -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
     $cmd = $ExecutionContext.InvokeCommand.ExpandString($cmd)
     Write-Host $cmd
 
