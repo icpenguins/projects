@@ -61,7 +61,7 @@
     & 'C:\Program Files\FFmpeg\bin\ffprobe.exe' -i 'D:\RIP\RockyIII\enc\Rocky III.mkv' 2>&1 | Select-String -Pattern '(?ims)Stream\s#\d:\d.*?(\d+x\d+).*?$' -all | %{$_.matches} | %{$_.Groups[1].Value}
 #>
 param (
-    [ValidateSet('detect', '2.35:1_800', '2.35:1_816')]
+    [ValidateSet('detect', '2:1_352', '2.35:1_800', '2.35:1_816', '2.70:1_704')]
     $Crop,
     $FFmpegPath = ${env:ProgramFiles} + "\FFmpeg\bin\ffmpeg.exe",
     $InputName,
@@ -132,6 +132,10 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
     # Use the following command to determine the type of cropping required if not already known.
     if ($null -ne $Crop) {
         switch ($crop) {
+            "2:1_352" {
+                $cmd += '-vf "crop=704:352:8:62" '
+                break;
+            }
             "2.35:1_800" {
                 $cmd += '-vf "crop=1920:800:0:140" '
                 break;
@@ -140,8 +144,13 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
                 $cmd += '-vf "crop=1920:816:0:132" '
                 break;
             }
+            "2.70:1_704" {
+                $cmd += '-vf "crop=1904:704:8:138" '
+                break;
+            }
             "detect" {
                 $cmd += '-vf "cropdetect" '
+                break;
             }
             Default {
                 throw [System.ArgumentOutOfRangeException] "The cropping value was incorrect."
