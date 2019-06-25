@@ -68,7 +68,7 @@ param (
     [ValidateRange(-1,1)]
     [Int]
     $Process = -1,
-    [ValidateSet('low', 'medium', 'high')]
+    [ValidateSet('verylow', 'low', 'medium', 'high')]
     $Quality = "medium",
     [switch]$Spatial,
     [switch]$Test,
@@ -159,6 +159,10 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
     }
 
     switch ($Quality) {
+        "verylow" {
+            $cmd += '-qmin 27 -qmax 32 '
+            break;
+        }
         "low" {
             $cmd += '-qmin 23 -qmax 28 '
             break;
