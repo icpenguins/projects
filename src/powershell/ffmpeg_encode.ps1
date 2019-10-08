@@ -60,6 +60,8 @@
     Get Video Stream Size
     & 'C:\Program Files\FFmpeg\bin\ffprobe.exe' -i 'D:\RIP\RockyIII\enc\Rocky III.mkv' 2>&1 | Select-String -Pattern '(?ims)Stream\s#\d:\d.*?(\d+x\d+).*?$' -all | %{$_.matches} | %{$_.Groups[1].Value}
 #>
+function Convert-Media {
+    [CmdletBinding()]
 param (
     [ValidateSet('detect', '2:1_352', '2.35:1_800', '2.35:1_816', '2.70:1_704')]
     $Crop,
@@ -197,3 +199,4 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
 }
 
 [System.Media.SystemSounds]::Beep.Play()
+}
