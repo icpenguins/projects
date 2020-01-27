@@ -63,7 +63,7 @@
 function Convert-Media {
     [CmdletBinding()]
 param (
-    [ValidateSet('detect', '2:1_352', '2.35:1_800', '2.35:1_816', '2.70:1_704')]
+    [ValidateSet('detect', '2:1_352', '2.35:1_800', '2.35:1_816', '2.70:1_704', '4:3_1440')]
     $Crop,
     $FFmpegPath = ${env:ProgramFiles} + "\FFmpeg\bin\ffmpeg.exe",
     $InputName,
@@ -148,6 +148,10 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
             }
             "2.70:1_704" {
                 $cmd += '-vf "crop=1904:704:8:138" '
+                break;
+            }
+            "4:3_1440" {
+                $cmd += '-vf "crop=1440:1072:240:4" '
                 break;
             }
             "detect" {
