@@ -120,13 +120,19 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
     Write-Host "In: " $list[$i] " Out: " $list[$i + 1]
 
     # Per https://trac.ffmpeg.org/wiki/HWAccelIntro add hardware output
-    $cmd = '"$FFmpegPath" -hide_banner -hwaccel cuda -hwaccel_output_format cuda '
+    $cmd = '"$FFmpegPath" -hide_banner -hwaccel cuda '
 
     if (-1 -lt $UseDevice) {
         $cmd += '-hwaccel_device $UseDevice '
     }
 
-    $cmd += '-y -probesize 60000000 -analyzeduration 340000000 -fix_sub_duration -i "$($list[$i])" '
+    # Order is important for command line placement
+    if ($null -ne $Crop) {
+        $cmd += "-hwaccel_output_format cuda "
+    }
+
+    # The -vsync 0 is necessary to prevent ffmpeg from duplicating each output frame to accommodate the originally detected frame rate.
+    $cmd += '-y -probesize 60000000 -analyzeduration 340000000 -vsync 0 -fix_sub_duration -i "$($list[$i])" '
 
     if ($Test.IsPresent) {
         $cmd += '-t 00:03:00 '
@@ -194,7 +200,10 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
         $cmd += '-spatial_aq 1 '
     }
 
-    $cmd += '-preset slow -rc vbr -2pass 1 -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
+    # Lookahead improves the video encoder’s rate-control accuracy by enabling the encoder to buffer the specified number of frames, estimate their complexity,
+    # and allocate the bits appropriately among these frames proportional to their complexity.
+    # https://docs.nvidia.com/video-technologies/video-codec-sdk/12.0/ffmpeg-with-nvidia-gpu/index.html
+    $cmd += '-preset slow -rc vbr -rc-lookahead 20 -2pass 1 -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
     $cmd = $ExecutionContext.InvokeCommand.ExpandString($cmd)
     Write-Host $cmd
 
