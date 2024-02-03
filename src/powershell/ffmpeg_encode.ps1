@@ -131,8 +131,7 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
         $cmd += "-hwaccel_output_format cuda "
     }
 
-    # The -vsync 0 is necessary to prevent ffmpeg from duplicating each output frame to accommodate the originally detected frame rate.
-    $cmd += '-y -probesize 60000000 -analyzeduration 340000000 -vsync 0 -fix_sub_duration -i "$($list[$i])" '
+    $cmd += '-y -probesize 60000000 -analyzeduration 340000000 -fix_sub_duration -i "$($list[$i])" '
 
     if ($Test.IsPresent) {
         $cmd += '-t 00:03:00 '
