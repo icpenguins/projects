@@ -72,6 +72,8 @@ param (
     $Process = -1,
     [ValidateSet('verylow', 'low', 'medium', 'high')]
     $Quality = "medium",
+    [ValidateSet("720")]
+    $Resize = $null,
     [switch]$Spatial,
     [switch]$Test,
     [ValidateRange(-1,5)]
@@ -138,36 +140,61 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
     }
 
     # Use the following command to determine the type of cropping required if not already known.
-    if ($null -ne $Crop) {
+    if ($null -ne $Crop -or $null -ne $Resize) {
+        $cmd += '-vf '
+
         switch ($crop) {
             "2:1_352" {
-                $cmd += '-vf "crop=704:352:8:62" '
+                $cmd += 'crop=704:352:8:62'
                 break;
             }
             "2.35:1_800" {
-                $cmd += '-vf "crop=1920:800:0:140" '
+                $cmd += 'crop=1920:800:0:140'
                 break;
             }
             "2.35:1_816" {
-                $cmd += '-vf "crop=1920:816:0:132" '
+                $cmd += 'crop=1920:816:0:132'
                 break;
             }
             "2.70:1_704" {
-                $cmd += '-vf "crop=1904:704:8:138" '
+                $cmd += 'crop=1904:704:8:138'
                 break;
             }
             "4:3_1440" {
-                $cmd += '-vf "crop=1440:1072:240:4" '
+                $cmd += 'crop=1440:1072:240:4'
                 break;
             }
             "detect" {
-                $cmd += '-vf "cropdetect" '
+                $cmd += 'mestimate,cropdetect=mode=mvedges,metadata=mode=print'
+                break;
+            }
+            $null {
                 break;
             }
             Default {
                 throw [System.ArgumentOutOfRangeException] "The cropping value was incorrect."
             }
         }
+
+        if ($null -ne $Crop) {
+            $cmd += ','
+        }
+
+        switch ($Resize) {
+            "720" {
+                $cmd += 'scale=-2:720'
+                break;
+            }
+            $null {
+                break;
+            }
+            Default {
+                throw [System.ArgumentOutOfRangeException] "The resizing request is not valid."
+            }
+        }
+
+        # Ensure a space at the end of the command
+        $cmd += ' '
     }
 
     switch ($Quality) {
