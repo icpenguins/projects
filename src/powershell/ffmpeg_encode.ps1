@@ -143,7 +143,7 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
     if ($null -ne $Crop -or $null -ne $Resize) {
         $cmd += '-vf '
 
-        switch ($crop) {
+        switch ($Crop) {
             "2:1_352" {
                 $cmd += 'crop=704:352:8:62'
                 break;
@@ -183,6 +183,10 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
         switch ($Resize) {
             "720" {
                 $cmd += 'scale=-2:720'
+                break;
+            }
+            "1080" {
+                $cmd += 'scale=-1:1080'
                 break;
             }
             $null {
