@@ -47,7 +47,7 @@
 
 .EXAMPLE
     # Basic usage against the default local server with default query params
-    .\ocr-request.ps1 -PdfPath "E:\OD_O\OneDrive\Documents2\ID-Community\Coeur Terre\Phase 2\20260906-pfhd_minutes\test\5c_approved_sept_minutes.pdf"
+    .\ocr-request.ps1 -PdfPath ".\test\5c_approved_sept_minutes.pdf"
 
 .EXAMPLE
     # Save the response to a file and override the base URL / query params
