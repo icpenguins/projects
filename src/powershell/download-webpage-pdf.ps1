@@ -193,6 +193,7 @@ function Write-FileMetadata {
     param(
         [Parameter(Mandatory)][string] $FilePath,
         [Parameter(Mandatory)][string] $FileUrl,
+        [Parameter(Mandatory)][string] $MetadataPath,
         [AllowEmptyString()][string] $LinkText = '',
         [Parameter(Mandatory)][string] $PageUrl,
         [Parameter(Mandatory)][string] $HashAlgorithm,
@@ -218,8 +219,7 @@ function Write-FileMetadata {
         Backfilled        = [bool]$Backfilled
     }
 
-    $metadataPath = [System.IO.Path]::ChangeExtension($FilePath, '.json')
-    $metadata | ConvertTo-Json | Set-Content -LiteralPath $metadataPath -Encoding UTF8
+    $metadata | ConvertTo-Json | Set-Content -LiteralPath $MetadataPath -Encoding UTF8
 }
 
 # --- Discover files ---
@@ -261,6 +261,7 @@ foreach ($doc in $documentUrls) {
     $decodedName = [Uri]::UnescapeDataString([System.IO.Path]::GetFileName($uri.AbsolutePath))
     $safeName = Get-SafeFileName -Name $decodedName
     $destination = Join-Path $OutputDirectory $safeName
+    $metadataPath = Join-Path (Split-Path -Path $destination) (@([System.IO.Path]::GetFileNameWithoutExtension($safeName), '_meta', '.json') | Join-String)
 
     Write-Progress -Activity 'Downloading archived minutes' -Status "$index of $($documentUrls.Count): $safeName" -PercentComplete (($index / $documentUrls.Count) * 100)
 
@@ -275,11 +276,10 @@ foreach ($doc in $documentUrls) {
         # download date is unknowable for a file we didn't just download, so the file's
         # own LastWriteTime is used as the best available approximation and the record
         # is flagged Backfilled so that distinction isn't lost.
-        $metadataPath = [System.IO.Path]::ChangeExtension($destination, '.json')
         if (-not (Test-Path -LiteralPath $metadataPath)) {
             if ($PSCmdlet.ShouldProcess($metadataPath, "Backfill metadata for existing $safeName")) {
                 try {
-                    Write-FileMetadata -FilePath $destination -FileUrl $fileUrl -LinkText $linkText -PageUrl $Url `
+                    Write-FileMetadata -FilePath $destination -FileUrl $fileUrl -MetadataPath $metadataPath -LinkText $linkText -PageUrl $Url `
                         -HashAlgorithm $HashAlgorithm -DownloadDate $existingFile.LastWriteTime.ToString('o') -Backfilled
                 } catch {
                     Write-Warning "Failed to backfill metadata for $safeName : $($_.Exception.Message)"
@@ -315,7 +315,7 @@ foreach ($doc in $documentUrls) {
             # Nested try/catch so a metadata-write problem can never be mistaken by the
             # outer catch for a failed download (which would delete the file and retry).
             try {
-                Write-FileMetadata -FilePath $destination -FileUrl $fileUrl -LinkText $linkText -PageUrl $Url -HashAlgorithm $HashAlgorithm
+                Write-FileMetadata -FilePath $destination -FileUrl $fileUrl -MetadataPath $metadataPath -LinkText $linkText -PageUrl $Url -HashAlgorithm $HashAlgorithm
             } catch {
                 Write-Warning "Failed to write metadata for $safeName : $($_.Exception.Message)"
             }
