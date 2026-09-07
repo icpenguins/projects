@@ -27,6 +27,12 @@
 
     Exactly one of -PdfPath or -SourceDir must be supplied.
 
+    Timing: every OCR request's upload+response duration is measured with
+    System.Diagnostics.Stopwatch and reported as it completes (e.g.
+    "Processed 'foo.pdf' in 12.3s"). Batch mode also lists each succeeded
+    file's duration in the final summary, and both modes report the total
+    wall-clock time for the whole run at the end.
+
 .PARAMETER PdfPath
     Path to a single PDF file to upload. Mutually exclusive with -SourceDir.
     Exactly one of -PdfPath / -SourceDir is required.
@@ -154,10 +160,35 @@ if (-not $PdfPath -and -not $SourceDir) {
     exit 1
 }
 
+# --- Start the total wall-clock timer for this run (covers the single file
+# in single-file mode, or the entire batch in -SourceDir mode) ---
+$totalStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
 # --- Build the target URI (shared by single-file and batch modes) ---
 $endpoint = "$($BaseUrl.TrimEnd('/'))/$($EndpointPath.TrimStart('/'))"
 $queryString = "layout=$Layout&tables=$Tables&formulas=$Formulas"
 $uri = "$endpoint`?$queryString"
+
+# --- Shared duration-formatting helper used by both single-file and batch modes ---
+function Format-Duration {
+    <#
+    .SYNOPSIS
+        Formats a TimeSpan as a compact, human-readable duration string.
+
+    .DESCRIPTION
+        Renders total elapsed seconds with one decimal place (e.g. "12.3s"),
+        matching the style used throughout this script's timing output.
+
+    .PARAMETER Duration
+        The TimeSpan to format, typically a Stopwatch's .Elapsed value.
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [TimeSpan]$Duration
+    )
+
+    return "{0:N1}s" -f $Duration.TotalSeconds
+}
 
 # --- Shared upload/response function used by both single-file and batch modes ---
 function Invoke-OcrUpload {
@@ -241,6 +272,7 @@ if ($PdfPath) {
 
     Write-Host "Uploading '$resolvedPdfPath' to $uri (field name: '$FieldName')..." -ForegroundColor Cyan
 
+    $fileStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     try {
         $result = Invoke-OcrUpload -ResolvedPdfPath $resolvedPdfPath
     }
@@ -248,6 +280,8 @@ if ($PdfPath) {
         Write-Error $_.Exception.Message
         exit 1
     }
+    $fileStopwatch.Stop()
+    Write-Host "Processed '$resolvedPdfPath' in $(Format-Duration $fileStopwatch.Elapsed)" -ForegroundColor Cyan
 
     Write-Output $result.PrettyJson
 
@@ -276,6 +310,9 @@ if ($PdfPath) {
         }
     }
 
+    $totalStopwatch.Stop()
+    Write-Host "Total elapsed: $(Format-Duration $totalStopwatch.Elapsed)" -ForegroundColor Cyan
+
     return
 }
 
@@ -303,7 +340,7 @@ if ($pdfFiles.Count -eq 0) {
 
 Write-Host "Found $($pdfFiles.Count) PDF file(s) in '$resolvedSourceDir'. Output directory: '$resolvedTargetDir'" -ForegroundColor Cyan
 
-$succeeded = [System.Collections.Generic.List[string]]::new()
+$succeeded = [System.Collections.Generic.List[PSCustomObject]]::new()
 $failed = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 foreach ($pdfFile in $pdfFiles) {
@@ -311,13 +348,20 @@ foreach ($pdfFile in $pdfFiles) {
 
     Write-Host "Uploading '$($pdfFile.FullName)' to $uri (field name: '$FieldName')..." -ForegroundColor Cyan
 
+    $fileStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
     try {
         $result = Invoke-OcrUpload -ResolvedPdfPath $pdfFile.FullName
+        $fileStopwatch.Stop()
+        Write-Host "  -> Processed '$($pdfFile.Name)' in $(Format-Duration $fileStopwatch.Elapsed)" -ForegroundColor Cyan
         $result.RawJson | Out-File -LiteralPath $outFilePath -Encoding utf8 -NoNewline
         Write-Host "  -> Saved to '$outFilePath'" -ForegroundColor Green
-        $succeeded.Add($pdfFile.Name)
+        $succeeded.Add([PSCustomObject]@{
+                File     = $pdfFile.Name
+                Duration = $fileStopwatch.Elapsed
+            })
     }
     catch {
+        $fileStopwatch.Stop()
         Write-Error "  -> Failed to process '$($pdfFile.Name)': $($_.Exception.Message)" -ErrorAction Continue
         $failed.Add([PSCustomObject]@{
                 File  = $pdfFile.Name
@@ -327,13 +371,20 @@ foreach ($pdfFile in $pdfFiles) {
 }
 
 # --- Batch summary ---
+$totalStopwatch.Stop()
 Write-Host ""
 Write-Host "=== Batch summary ===" -ForegroundColor Cyan
 Write-Host "Succeeded: $($succeeded.Count) / $($pdfFiles.Count)" -ForegroundColor Green
+foreach ($success in $succeeded) {
+    Write-Host "  - $($success.File): $(Format-Duration $success.Duration)" -ForegroundColor Green
+}
 if ($failed.Count -gt 0) {
     Write-Host "Failed: $($failed.Count) / $($pdfFiles.Count)" -ForegroundColor Red
     foreach ($failure in $failed) {
         Write-Host "  - $($failure.File): $($failure.Error)" -ForegroundColor Red
     }
+}
+Write-Host "Total elapsed: $(Format-Duration $totalStopwatch.Elapsed)" -ForegroundColor Cyan
+if ($failed.Count -gt 0) {
     exit 1
 }
