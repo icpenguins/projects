@@ -46,15 +46,15 @@
 .PARAMETER TargetDir
     Directory to write JSON output file(s) to.
 
-    In batch mode (-SourceDir), this overrides the default output location
-    of "<SourceDir>\to-text". Each PDF's output is written as
-    "<TargetDir>\<pdf-base-name>.json". The directory is created if it does
-    not already exist. An existing output file for the same PDF name is
-    overwritten.
+    In batch mode (-SourceDir), this overrides the default output location,
+    which is the source directory itself ("<SourceDir>"). Each PDF's output
+    is written as "<TargetDir>\<pdf-base-name>_ocr.json". The directory is
+    created if it does not already exist. An existing output file for the
+    same PDF name is overwritten.
 
     In single-file mode (-PdfPath), -TargetDir is optional: if supplied
     (and -OutFile is not), the response is saved as
-    "<TargetDir>\<pdf-base-name>.json" instead of requiring an explicit
+    "<TargetDir>\<pdf-base-name>_ocr.json" instead of requiring an explicit
     -OutFile. If both -OutFile and -TargetDir are given in single-file mode,
     -OutFile takes precedence (it is the more explicit/specific instruction).
 
@@ -105,13 +105,13 @@
     .\ocr-request.ps1 -PdfPath "C:\docs\sample.pdf" -FieldName "document"
 
 .EXAMPLE
-    # Batch mode: OCR every PDF in a folder, writing results to
-    # C:\docs\to-process\to-text\<name>.json (created automatically)
+    # Batch mode: OCR every PDF in a folder, writing results directly into
+    # that same folder as C:\docs\to-process\<name>_ocr.json
     .\ocr-request.ps1 -SourceDir "C:\docs\to-process"
 
 .EXAMPLE
     # Batch mode with a custom output directory instead of the default
-    # "<SourceDir>\to-text"
+    # (the source directory itself)
     .\ocr-request.ps1 -SourceDir "C:\docs\to-process" -TargetDir "C:\docs\results"
 
 .NOTES
@@ -296,7 +296,7 @@ if ($PdfPath) {
             New-Item -ItemType Directory -Force -Path $TargetDir | Out-Null
         }
         $baseName = [System.IO.Path]::GetFileNameWithoutExtension($resolvedPdfPath)
-        $effectiveOutFile = Join-Path -Path $TargetDir -ChildPath "$baseName.json"
+        $effectiveOutFile = Join-Path -Path $TargetDir -ChildPath "${baseName}_ocr.json"
     }
 
     if ($effectiveOutFile) {
@@ -324,8 +324,8 @@ if (-not (Test-Path -LiteralPath $SourceDir -PathType Container)) {
 
 $resolvedSourceDir = (Resolve-Path -LiteralPath $SourceDir).Path
 
-# Default output directory is "<SourceDir>\to-text" unless -TargetDir overrides it.
-$resolvedTargetDir = if ($TargetDir) { $TargetDir } else { Join-Path -Path $resolvedSourceDir -ChildPath "to-text" }
+# Default output directory is the source directory itself unless -TargetDir overrides it.
+$resolvedTargetDir = if ($TargetDir) { $TargetDir } else { $resolvedSourceDir }
 if (-not (Test-Path -LiteralPath $resolvedTargetDir -PathType Container)) {
     New-Item -ItemType Directory -Force -Path $resolvedTargetDir | Out-Null
 }
@@ -344,7 +344,7 @@ $succeeded = [System.Collections.Generic.List[PSCustomObject]]::new()
 $failed = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 foreach ($pdfFile in $pdfFiles) {
-    $outFilePath = Join-Path -Path $resolvedTargetDir -ChildPath "$([System.IO.Path]::GetFileNameWithoutExtension($pdfFile.Name)).json"
+    $outFilePath = Join-Path -Path $resolvedTargetDir -ChildPath "$([System.IO.Path]::GetFileNameWithoutExtension($pdfFile.Name))_ocr.json"
 
     Write-Host "Uploading '$($pdfFile.FullName)' to $uri (field name: '$FieldName')..." -ForegroundColor Cyan
 
