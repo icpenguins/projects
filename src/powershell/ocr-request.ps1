@@ -11,6 +11,22 @@
     field name used for the file upload defaults to "file" but can be changed
     with -FieldName if the API expects a different field name.
 
+    The saved output file is a JSON envelope, not the server's raw response
+    body verbatim: it wraps the OCR content alongside the request context
+    (source PDF, endpoint, query params) and the HTTP response metadata
+    (status code, headers), so each output file is self-describing. Shape:
+
+        {
+          "request":  { "pdfPath": "...", "pdfFileName": "...", "uri": "...",
+                        "baseUrl": "...", "endpointPath": "...",
+                        "layout": "...", "tables": "...", "formulas": "...",
+                        "fieldName": "..." },
+          "response": { "statusCode": 200, "statusDescription": "OK",
+                        "headers": { "Content-Type": "application/json", ... } },
+          "ocr":      { ...exactly what the OCR server returned as its
+                        response body... }
+        }
+
     The script has two mutually exclusive modes:
 
     Single-file mode (-PdfPath): uploads one PDF and prints the JSON response.
@@ -190,18 +206,56 @@ function Format-Duration {
     return "{0:N1}s" -f $Duration.TotalSeconds
 }
 
+# --- Shared header-flattening helper used by Invoke-OcrUpload ---
+function Get-FlattenedHeaders {
+    <#
+    .SYNOPSIS
+        Flattens an HTTP response's Headers dictionary into a plain ordered
+        hashtable suitable for JSON serialization.
+
+    .DESCRIPTION
+        Invoke-WebRequest's $response.Headers is a
+        Dictionary<string, IEnumerable<string>>. This collapses each entry
+        to a plain string when it has exactly one value, or keeps it as a
+        string array when it has multiple values, so ConvertTo-Json renders
+        it naturally instead of as nested enumerator objects.
+
+    .PARAMETER Headers
+        The response Headers dictionary (e.g. $response.Headers).
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        $Headers
+    )
+
+    $flattened = [ordered]@{}
+    foreach ($key in $Headers.Keys) {
+        $values = @($Headers[$key])
+        if ($values.Count -eq 1) {
+            $flattened[$key] = $values[0]
+        }
+        else {
+            $flattened[$key] = $values
+        }
+    }
+    return $flattened
+}
+
 # --- Shared upload/response function used by both single-file and batch modes ---
 function Invoke-OcrUpload {
     <#
     .SYNOPSIS
-        Uploads one PDF to the OCR API and returns the parsed JSON response.
+        Uploads one PDF to the OCR API and returns a JSON envelope wrapping
+        the request context, HTTP response metadata, and the OCR content.
 
     .DESCRIPTION
         Performs the multipart POST for a single resolved PDF path and
-        returns an object with both the raw response text and, if parseable,
-        the pretty-printed JSON text. Throws on any failure; the caller is
-        responsible for catching and reporting (single-file mode exits on
-        failure, batch mode catches per-file and continues).
+        returns an object whose Json property is the fully-serialized
+        envelope (see this script's top-level .DESCRIPTION for the shape).
+        Throws on any failure; the caller is responsible for catching and
+        reporting (single-file mode exits on failure, batch mode catches
+        per-file and continues). No envelope is built on failure -- a
+        failed request throws before this point, so nothing is written.
 
     .PARAMETER ResolvedPdfPath
         Fully resolved, existing path to the PDF file to upload.
@@ -247,17 +301,38 @@ function Invoke-OcrUpload {
     $rawJson = $response.Content
 
     try {
-        $parsed = $rawJson | ConvertFrom-Json -ErrorAction Stop
-        $prettyJson = $parsed | ConvertTo-Json -Depth 50
+        $ocrContent = $rawJson | ConvertFrom-Json -ErrorAction Stop
     }
     catch {
-        # If it isn't valid JSON for some reason, fall back to the raw body
-        $prettyJson = $rawJson
+        # If it isn't valid JSON for some reason, fall back to keeping the
+        # raw text as the "ocr" value -- never silently drop data.
+        $ocrContent = $rawJson
     }
 
+    $envelope = [ordered]@{
+        request  = [ordered]@{
+            pdfPath      = $ResolvedPdfPath
+            pdfFileName  = [System.IO.Path]::GetFileName($ResolvedPdfPath)
+            uri          = $uri
+            baseUrl      = $BaseUrl
+            endpointPath = $EndpointPath
+            layout       = $Layout
+            tables       = $Tables
+            formulas     = $Formulas
+            fieldName    = $FieldName
+        }
+        response = [ordered]@{
+            statusCode        = [int]$response.StatusCode
+            statusDescription = $response.StatusDescription
+            headers           = Get-FlattenedHeaders -Headers $response.Headers
+        }
+        ocr      = $ocrContent
+    }
+
+    $json = $envelope | ConvertTo-Json -Depth 50
+
     return [PSCustomObject]@{
-        RawJson    = $rawJson
-        PrettyJson = $prettyJson
+        Json = $json
     }
 }
 
@@ -283,7 +358,7 @@ if ($PdfPath) {
     $fileStopwatch.Stop()
     Write-Host "Processed '$resolvedPdfPath' in $(Format-Duration $fileStopwatch.Elapsed)" -ForegroundColor Cyan
 
-    Write-Output $result.PrettyJson
+    Write-Output $result.Json
 
     # --- Resolve where (if anywhere) to save the response ---
     # -OutFile takes precedence over -TargetDir when both are supplied.
@@ -301,7 +376,7 @@ if ($PdfPath) {
 
     if ($effectiveOutFile) {
         try {
-            $result.RawJson | Out-File -LiteralPath $effectiveOutFile -Encoding utf8 -NoNewline
+            $result.Json | Out-File -LiteralPath $effectiveOutFile -Encoding utf8 -NoNewline
             Write-Host "Response saved to '$effectiveOutFile'" -ForegroundColor Green
         }
         catch {
@@ -353,7 +428,7 @@ foreach ($pdfFile in $pdfFiles) {
         $result = Invoke-OcrUpload -ResolvedPdfPath $pdfFile.FullName
         $fileStopwatch.Stop()
         Write-Host "  -> Processed '$($pdfFile.Name)' in $(Format-Duration $fileStopwatch.Elapsed)" -ForegroundColor Cyan
-        $result.RawJson | Out-File -LiteralPath $outFilePath -Encoding utf8 -NoNewline
+        $result.Json | Out-File -LiteralPath $outFilePath -Encoding utf8 -NoNewline
         Write-Host "  -> Saved to '$outFilePath'" -ForegroundColor Green
         $succeeded.Add([PSCustomObject]@{
                 File     = $pdfFile.Name

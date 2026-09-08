@@ -18,6 +18,18 @@
           ]
         }
 
+    This script accepts either of two on-disk shapes for the input JSON:
+
+      - Enveloped (current ocr-request.ps1 output): the object above is
+        nested under an "ocr" key, alongside sibling "request" and
+        "response" metadata, i.e. { "request": {...}, "response": {...},
+        "ocr": { "pages": [...] } }. When an "ocr" property is present at
+        the root, its value is used as the effective document.
+      - Flat (legacy, pre-envelope ocr-request.ps1 output, or any
+        already-generated file predating the envelope change): the "pages"
+        array sits directly at the JSON root, as shown above. Used as-is
+        when no "ocr" property is present.
+
     and converts it to Markdown, preserving reading order:
 
       - Pages are processed in ascending "page" number order.
@@ -436,7 +448,18 @@ function Convert-OcrJsonFile {
         throw "Failed to parse '$ResolvedJsonPath' as JSON: $($_.Exception.Message)"
     }
 
-    $markdown = Convert-OcrJsonToMarkdown -OcrData $parsed -SourceFileName (Split-Path -Leaf $ResolvedJsonPath) `
+    # Transparently unwrap the enveloped shape ({ request, response, ocr })
+    # produced by the current ocr-request.ps1, while remaining backward
+    # compatible with flat-format files (the "pages" array at the JSON
+    # root) that predate the envelope change.
+    $ocrData = if (Get-Member -InputObject $parsed -Name "ocr" -MemberType Properties) {
+        $parsed.ocr
+    }
+    else {
+        $parsed
+    }
+
+    $markdown = Convert-OcrJsonToMarkdown -OcrData $ocrData -SourceFileName (Split-Path -Leaf $ResolvedJsonPath) `
         -IncludePageBreaks $IncludePageBreaks -IncludeBoilerplate $IncludeBoilerplate
 
     $outDir = Split-Path -Parent $ResolvedOutFile
