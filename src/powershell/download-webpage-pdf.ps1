@@ -268,7 +268,7 @@ foreach ($doc in $documentUrls) {
     if ((Test-Path -LiteralPath $destination) -and -not $Force) {
         $existingFile = Get-Item -LiteralPath $destination
         Write-Host "[skip]      $safeName (already exists)" -ForegroundColor DarkGray
-        $results.Add([pscustomobject]@{ File = $safeName; Url = $fileUrl; Status = 'Skipped (exists)'; SizeBytes = $existingFile.Length })
+        $results.Add([pscustomobject]@{ Date = (Get-Date -Format "yyyy-MM-dd_HH-mm-ss"); File = $safeName; Url = $fileUrl; Status = 'Skipped (exists)'; SizeBytes = $existingFile.Length })
 
         # Backfill a metadata sidecar for a pre-existing file that doesn't have one yet.
         # Never overwrite an existing sidecar here (mirrors the download skip semantics
@@ -290,7 +290,7 @@ foreach ($doc in $documentUrls) {
     }
 
     if (-not $PSCmdlet.ShouldProcess($destination, "Download from $fileUrl")) {
-        $results.Add([pscustomobject]@{ File = $safeName; Url = $fileUrl; Status = 'Skipped (-WhatIf)'; SizeBytes = 0 })
+        $results.Add([pscustomobject]@{ Date = (Get-Date -Format "yyyy-MM-dd_HH-mm-ss"); File = $safeName; Url = $fileUrl; Status = 'Skipped (-WhatIf)'; SizeBytes = 0 })
         continue
     }
 
@@ -309,7 +309,7 @@ foreach ($doc in $documentUrls) {
             }
 
             Write-Host "[ok]        $safeName ($([math]::Round($fileInfo.Length / 1KB, 1)) KB)" -ForegroundColor Green
-            $results.Add([pscustomobject]@{ File = $safeName; Url = $fileUrl; Status = 'Downloaded'; SizeBytes = $fileInfo.Length })
+            $results.Add([pscustomobject]@{ Date = (Get-Date -Format "yyyy-MM-dd_HH-mm-ss"); File = $safeName; Url = $fileUrl; Status = 'Downloaded'; SizeBytes = $fileInfo.Length })
             $downloaded = $true
 
             # Nested try/catch so a metadata-write problem can never be mistaken by the
@@ -333,7 +333,7 @@ foreach ($doc in $documentUrls) {
 
     if (-not $downloaded) {
         Write-Warning "[failed]    $safeName after $MaxRetries attempt(s): $lastError"
-        $results.Add([pscustomobject]@{ File = $safeName; Url = $fileUrl; Status = "Failed: $lastError"; SizeBytes = 0 })
+        $results.Add([pscustomobject]@{ Date = (Get-Date -Format "yyyy-MM-dd_HH-mm-ss"); File = $safeName; Url = $fileUrl; Status = "Failed: $lastError"; SizeBytes = 0 })
     }
 
     Start-Sleep -Milliseconds $DelayMilliseconds
@@ -343,7 +343,7 @@ Write-Progress -Activity 'Downloading archived minutes' -Completed
 
 # --- Summary & log ---
 $logPath = Join-Path $OutputDirectory 'download-log.csv'
-$results | Export-Csv -LiteralPath $logPath -NoTypeInformation -Encoding UTF8
+$results | Export-Csv -LiteralPath $logPath -NoTypeInformation -Encoding UTF8 -Append
 
 $downloadedCount = ($results | Where-Object { $_.Status -eq 'Downloaded' }).Count
 $skippedCount    = ($results | Where-Object { $_.Status -like 'Skipped*' }).Count
