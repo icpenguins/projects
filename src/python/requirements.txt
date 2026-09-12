@@ -1,0 +1,10 @@
+# pdfToText.py
+numpy
+pillow
+pypdf
+onnxruntime
+rapidocr_onnxruntime
+
+# sp500ConstituentHistory.py
+requests
+beautifulsoup4
