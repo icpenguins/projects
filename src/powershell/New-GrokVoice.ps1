@@ -453,9 +453,11 @@ function New-GrokVoice {
     $item
 }
 
-# When the file is executed directly (not dot-sourced), run the function with
-# the supplied arguments. When dot-sourced, only define the function.
-if ($MyInvocation.InvocationName -ne '.') {
+# When the file is executed directly, run the function with the supplied
+# arguments. When dot-sourced or loaded with Import-Module, only define the
+# function. InvocationName is '.' when dot-sourced and empty under
+# Import-Module; it is '&' or the script path when run directly.
+if ($MyInvocation.InvocationName -and $MyInvocation.InvocationName -ne '.') {
     if (-not $OutFile -or -not ($TextFile -or $Text)) {
         throw "Usage: New-GrokVoice.ps1 <TextFile> <OutFile> [options]   or   New-GrokVoice.ps1 -Text '<text>' <OutFile> [options]`n" +
               "Options: -VoiceId -Language -Speed -Codec -SampleRate -BitRate -TextNormalization -Replace -WithTimestamps -CredentialTarget -Force -WhatIf`n" +
