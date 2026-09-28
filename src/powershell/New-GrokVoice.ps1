@@ -1,23 +1,20 @@
 #Requires -Version 7.0
 <#
 .SYNOPSIS
-    Defines New-GrokVoice, which converts a text file to speech with the xAI
-    (Grok) text-to-speech API and writes the audio to a file.
+    Defines New-GrokVoice, which converts text to speech with the xAI (Grok)
+    text-to-speech API (POST https://api.x.ai/v1/tts) and writes the audio to
+    a file.
 
 .DESCRIPTION
-    Minimal wrapper around POST https://api.x.ai/v1/tts. The function takes
-    two required arguments, the text file to read and the audio file to write,
-    plus two optional switches: -VoiceId (default "eve") and
-    -CredentialTarget (default "localAgentKey").
-
     Load the function into your session by dot-sourcing this file:
 
         . .\New-GrokVoice.ps1
         New-GrokVoice .\notes.txt .\notes.mp3
 
-    Running the file directly with the arguments also works:
+    Running the file directly also works; every parameter below is accepted
+    on the command line:
 
-        .\New-GrokVoice.ps1 .\notes.txt .\notes.mp3 -VoiceId ara
+        .\New-GrokVoice.ps1 .\notes.txt .\notes.mp3 -VoiceId ara -Speed 1.1
 
     The API key is read from Windows Credential Manager at run time with the
     CredentialManager module from the PowerShell Gallery (installed for the
@@ -32,81 +29,195 @@
 
         cmdkey /generic:localAgentKey /user:xai /pass
 
-    The output codec is chosen from the output path's extension:
-    .mp3 (default bit rate), .wav, or .pcm. The language is a fixed constant
-    inside the function. The endpoint accepts up to 60,000 characters of text
-    per call.
+    Text may contain xAI speech tags. Inline tags: [pause] [long-pause]
+    [laugh] [cry] [sniff] [gasp] [sigh] [clear-throat]. Wrapping tags:
+    <loud> <soft> <whisper> <fast> <slow> <high-pitch> <low-pitch> <singing>
+    <robot>, e.g. "I walked in and [pause] <whisper>there it was</whisper>."
 
 .PARAMETER TextFile
-    Path to a UTF-8 text file whose contents will be spoken.
+    Path to a UTF-8 text file whose contents will be spoken (File parameter
+    set, the default). At most 60,000 characters.
+
+.PARAMETER Text
+    The text to speak, given directly instead of a file (Text parameter set).
+    At most 60,000 characters.
 
 .PARAMETER OutFile
-    Path of the audio file to write. The extension selects the codec.
+    Path of the audio file to write. Unless -Codec is given, the extension
+    selects the codec: .mp3, .wav, .pcm/.raw, .ulaw/.mulaw, .alaw.
 
 .PARAMETER VoiceId
-    Built-in xAI voice name (for example eve, ara) or a custom voice ID.
-    Defaults to "eve".
+    Built-in xAI voice name (eve, ara, rex, ...) or a custom voice ID.
+    Case-insensitive. Defaults to "eve".
+
+.PARAMETER Language
+    BCP-47 language code or "auto" for detection. Defaults to "en".
+    Documented codes: auto, en, ar-EG, ar-SA, ar-AE, bn, zh, fr, de, hi, id,
+    it, ja, ko, pt-BR, pt-PT, ru, es-MX, es-ES, tr, vi.
+
+.PARAMETER Speed
+    Speech rate multiplier from 0.7 to 1.5. Defaults to 1.0.
+
+.PARAMETER Codec
+    Output codec: mp3, wav, pcm, mulaw, alaw. Overrides the extension of
+    -OutFile.
+
+.PARAMETER SampleRate
+    Output sample rate in Hz: 8000, 16000, 22050, 24000, 44100, 48000.
+    Defaults to the service default (24000).
+
+.PARAMETER BitRate
+    MP3 bit rate in bps: 32000, 64000, 96000, 128000, 192000. Only valid with
+    the mp3 codec. Defaults to the service default (128000).
+
+.PARAMETER TextNormalization
+    Ask the service to expand written forms (numbers, abbreviations, dates)
+    into their spoken form before synthesis.
+
+.PARAMETER Replace
+    Hashtable mapping phrases to pronunciations, applied before synthesis.
+    Values may be respellings or IPA, e.g. @{ 'xAI' = 'ex A I'; 'nginx' =
+    '/ˈɛndʒɪn ˈɛks/' }. Matching is case-insensitive on whole words. At most
+    200 entries; keys up to 100 characters, values up to 128.
+
+.PARAMETER WithTimestamps
+    Also request character-level timing. The audio is still written to
+    -OutFile; the timing data (duration, graph_chars, graph_times) is written
+    as JSON next to it with the extension .timestamps.json.
 
 .PARAMETER CredentialTarget
     Name of the generic credential in Windows Credential Manager that holds
     the API key. Defaults to "localAgentKey".
+
+.PARAMETER Force
+    Overwrite -OutFile (and the timestamps sidecar) if it already exists.
+
+.OUTPUTS
+    System.IO.FileInfo for the audio file written.
+
+.EXAMPLE
+    New-GrokVoice .\notes.txt .\notes.mp3
+
+.EXAMPLE
+    New-GrokVoice -Text 'Build finished. [pause] All tests passed.' -OutFile .\done.wav -VoiceId rex
+
+.EXAMPLE
+    New-GrokVoice .\script.txt .\script.mp3 -Language es-MX -Speed 0.9 -BitRate 192000 -TextNormalization
+
+.EXAMPLE
+    New-GrokVoice .\ivr.txt .\ivr.ulaw -SampleRate 8000 -Replace @{ 'SQL' = 'sequel' } -Force
+
+.EXAMPLE
+    New-GrokVoice .\notes.txt .\notes.mp3 -WithTimestamps -WhatIf
 #>
-[CmdletBinding()]
+[CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = 'File')]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'CredentialTarget',
     Justification = 'Holds the Credential Manager target name, not a secret.')]
 param(
-    [Parameter(Position = 0)]
+    [Parameter(ParameterSetName = 'File', Position = 0)]
     [string]$TextFile,
 
-    [Parameter(Position = 1)]
+    [Parameter(ParameterSetName = 'Text')]
+    [string]$Text,
+
+    [Parameter(ParameterSetName = 'File', Position = 1)]
+    [Parameter(ParameterSetName = 'Text', Position = 0)]
     [string]$OutFile,
 
-    [Parameter()]
     [string]$VoiceId = 'eve',
-
-    [Parameter()]
-    [string]$CredentialTarget = 'localAgentKey'
+    [string]$Language = 'en',
+    [double]$Speed = 1.0,
+    [string]$Codec,
+    [int]$SampleRate,
+    [int]$BitRate,
+    [switch]$TextNormalization,
+    [hashtable]$Replace,
+    [switch]$WithTimestamps,
+    [string]$CredentialTarget = 'localAgentKey',
+    [switch]$Force
 )
 
 function New-GrokVoice {
     <#
     .SYNOPSIS
-        Converts a text file to speech with the xAI (Grok) API and writes the
-        audio to a file. The API key is read from Windows Credential Manager
+        Converts text to speech with the xAI (Grok) API and writes the audio
+        to a file. The API key is read from Windows Credential Manager
         (target name "localAgentKey" unless -CredentialTarget is given).
+
+    .DESCRIPTION
+        Wraps POST https://api.x.ai/v1/tts. Text comes from -TextFile (the
+        default parameter set) or -Text. The codec is taken from -Codec or,
+        failing that, from the -OutFile extension (.mp3, .wav, .pcm/.raw,
+        .ulaw/.mulaw, .alaw). See the file-level help for speech tags and
+        full parameter descriptions.
 
     .PARAMETER TextFile
         Path to a UTF-8 text file whose contents will be spoken.
 
+    .PARAMETER Text
+        The text to speak, given directly instead of a file.
+
     .PARAMETER OutFile
-        Path of the audio file to write. The extension (.mp3, .wav, .pcm)
-        selects the codec.
+        Path of the audio file to write.
 
     .PARAMETER VoiceId
-        Built-in xAI voice name (for example eve, ara) or a custom voice ID.
-        Defaults to "eve".
+        Built-in xAI voice name or custom voice ID. Defaults to "eve".
+
+    .PARAMETER Language
+        BCP-47 code or "auto". Defaults to "en".
+
+    .PARAMETER Speed
+        Speech rate multiplier, 0.7 to 1.5. Defaults to 1.0.
+
+    .PARAMETER Codec
+        mp3, wav, pcm, mulaw, or alaw. Overrides the -OutFile extension.
+
+    .PARAMETER SampleRate
+        8000, 16000, 22050, 24000, 44100, or 48000 Hz.
+
+    .PARAMETER BitRate
+        32000, 64000, 96000, 128000, or 192000 bps. MP3 only.
+
+    .PARAMETER TextNormalization
+        Expand numbers and abbreviations to spoken form.
+
+    .PARAMETER Replace
+        Hashtable of phrase-to-pronunciation substitutions (max 200).
+
+    .PARAMETER WithTimestamps
+        Also write character timing JSON next to the audio file.
 
     .PARAMETER CredentialTarget
-        Name of the generic credential in Windows Credential Manager that
-        holds the API key. Defaults to "localAgentKey".
+        Credential Manager target holding the key. Defaults to "localAgentKey".
+
+    .PARAMETER Force
+        Overwrite existing output files.
+
+    .OUTPUTS
+        System.IO.FileInfo for the audio file written.
 
     .EXAMPLE
         New-GrokVoice .\notes.txt .\notes.mp3
 
     .EXAMPLE
-        New-GrokVoice -TextFile script.txt -OutFile script.wav
-
-    .EXAMPLE
-        New-GrokVoice .\notes.txt .\notes.mp3 -VoiceId ara -CredentialTarget grok-voice
+        New-GrokVoice -Text 'Hello [pause] world.' -OutFile hi.wav -VoiceId ara -Speed 1.2
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = 'File')]
+    [OutputType([System.IO.FileInfo])]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'CredentialTarget',
         Justification = 'Holds the Credential Manager target name, not a secret.')]
     param(
-        [Parameter(Mandatory = $true, Position = 0)]
+        [Parameter(Mandatory = $true, ParameterSetName = 'File', Position = 0)]
+        [ValidateNotNullOrEmpty()]
         [string]$TextFile,
 
-        [Parameter(Mandatory = $true, Position = 1)]
+        [Parameter(Mandatory = $true, ParameterSetName = 'Text')]
+        [ValidateNotNullOrEmpty()]
+        [string]$Text,
+
+        [Parameter(Mandatory = $true, ParameterSetName = 'File', Position = 1)]
+        [Parameter(Mandatory = $true, ParameterSetName = 'Text', Position = 0)]
+        [ValidateNotNullOrEmpty()]
         [string]$OutFile,
 
         [Parameter()]
@@ -114,47 +225,146 @@ function New-GrokVoice {
         [string]$VoiceId = 'eve',
 
         [Parameter()]
+        [ValidatePattern('^(auto|[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*)$')]
+        [string]$Language = 'en',
+
+        [Parameter()]
+        [ValidateRange(0.7, 1.5)]
+        [double]$Speed = 1.0,
+
+        [Parameter()]
+        [ValidateSet('mp3', 'wav', 'pcm', 'mulaw', 'alaw')]
+        [string]$Codec,
+
+        [Parameter()]
+        [ValidateSet(8000, 16000, 22050, 24000, 44100, 48000)]
+        [int]$SampleRate,
+
+        [Parameter()]
+        [ValidateSet(32000, 64000, 96000, 128000, 192000)]
+        [int]$BitRate,
+
+        [Parameter()]
+        [switch]$TextNormalization,
+
+        [Parameter()]
+        [hashtable]$Replace,
+
+        [Parameter()]
+        [switch]$WithTimestamps,
+
+        [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [string]$CredentialTarget = 'localAgentKey'
+        [string]$CredentialTarget = 'localAgentKey',
+
+        [Parameter()]
+        [switch]$Force
     )
 
     $ErrorActionPreference = 'Stop'
     $ProgressPreference = 'SilentlyContinue'
 
-    # ---- Constants ---------------------------------------------------------
-    $TtsUri       = 'https://api.x.ai/v1/tts'
-    $Language     = 'en'                    # BCP-47 code, or 'auto'
-    $MaxTextChars = 60000
-
-    # ---- Validate input ----------------------------------------------------
-    if (-not (Test-Path -LiteralPath $TextFile -PathType Leaf)) {
-        throw "Text file not found: $TextFile"
-    }
-    $textFull = (Resolve-Path -LiteralPath $TextFile).Path
-
-    $text = [System.IO.File]::ReadAllText($textFull, [System.Text.Encoding]::UTF8).Trim()
-    if ([string]::IsNullOrWhiteSpace($text)) {
-        throw "Text file is empty: $TextFile"
-    }
-    if ($text.Length -gt $MaxTextChars) {
-        throw "Text is $($text.Length) characters; the endpoint accepts at most $MaxTextChars."
+    # ---- Constants (from https://docs.x.ai/developers/model-capabilities/audio/text-to-speech)
+    $TtsUri             = 'https://api.x.ai/v1/tts'
+    $MaxTextChars       = 60000     # per unary request
+    $MaxReplaceEntries  = 200
+    $MaxReplaceKeyLen   = 100
+    $MaxReplaceValueLen = 128
+    $TimeoutSec         = 900       # the unary endpoint times out at 15 minutes
+    $ExtensionCodecs    = @{
+        '.mp3' = 'mp3'; '.wav' = 'wav'; '.pcm' = 'pcm'; '.raw' = 'pcm'
+        '.ulaw' = 'mulaw'; '.mulaw' = 'mulaw'; '.alaw' = 'alaw'
     }
 
-    $codec = switch ([System.IO.Path]::GetExtension($OutFile).ToLowerInvariant()) {
-        '.mp3'  { 'mp3' }
-        '.wav'  { 'wav' }
-        '.pcm'  { 'pcm' }
-        default { throw "Output extension must be .mp3, .wav, or .pcm: $OutFile" }
+    # ---- Resolve the text --------------------------------------------------
+    if ($PSCmdlet.ParameterSetName -eq 'File') {
+        if (-not (Test-Path -LiteralPath $TextFile -PathType Leaf)) {
+            throw "Text file not found: $TextFile"
+        }
+        $textFull = (Resolve-Path -LiteralPath $TextFile).Path
+        $speech = [System.IO.File]::ReadAllText($textFull, [System.Text.Encoding]::UTF8).Trim()
+        $source = $textFull
+    }
+    else {
+        $speech = $Text.Trim()
+        $source = '-Text'
+    }
+    if ([string]::IsNullOrWhiteSpace($speech)) {
+        throw "No text to speak (source: $source)."
+    }
+    if ($speech.Length -gt $MaxTextChars) {
+        throw "Text is $($speech.Length) characters; the endpoint accepts at most $MaxTextChars per request."
     }
 
+    # ---- Resolve output format --------------------------------------------
+    if (-not $Codec) {
+        $ext = [System.IO.Path]::GetExtension($OutFile).ToLowerInvariant()
+        if (-not $ExtensionCodecs.ContainsKey($ext)) {
+            throw "Cannot infer a codec from extension '$ext'. Use .mp3, .wav, .pcm, .raw, .ulaw, .mulaw or .alaw, or pass -Codec."
+        }
+        $Codec = $ExtensionCodecs[$ext]
+    }
+    if ($BitRate -and $Codec -ne 'mp3') {
+        throw "-BitRate applies only to the mp3 codec (requested codec: $Codec)."
+    }
+
+    $outputFormat = [ordered]@{ codec = $Codec }
+    if ($SampleRate) { $outputFormat.sample_rate = $SampleRate }
+    if ($BitRate)    { $outputFormat.bit_rate    = $BitRate }
+
+    # ---- Validate the replace map -----------------------------------------
+    if ($Replace) {
+        if ($Replace.Count -gt $MaxReplaceEntries) {
+            throw "-Replace has $($Replace.Count) entries; the limit is $MaxReplaceEntries."
+        }
+        foreach ($entry in $Replace.GetEnumerator()) {
+            $k = [string]$entry.Key
+            $v = [string]$entry.Value
+            if ([string]::IsNullOrWhiteSpace($k) -or $k.Length -gt $MaxReplaceKeyLen) {
+                throw "-Replace key '$k' must be 1 to $MaxReplaceKeyLen characters."
+            }
+            if ([string]::IsNullOrWhiteSpace($v) -or $v.Length -gt $MaxReplaceValueLen) {
+                throw "-Replace value for '$k' must be 1 to $MaxReplaceValueLen characters."
+            }
+        }
+    }
+
+    # ---- Resolve output paths ---------------------------------------------
     $outFull = if ([System.IO.Path]::IsPathRooted($OutFile)) {
         [System.IO.Path]::GetFullPath($OutFile)
     } else {
         [System.IO.Path]::GetFullPath((Join-Path (Get-Location).Path $OutFile))
     }
+    $timestampsFull = if ($WithTimestamps) { [System.IO.Path]::ChangeExtension($outFull, '.timestamps.json') } else { $null }
+
+    foreach ($p in @($outFull, $timestampsFull) | Where-Object { $_ }) {
+        if ((Test-Path -LiteralPath $p) -and -not $Force) {
+            throw "Output file already exists: $p (use -Force to overwrite)."
+        }
+    }
     $outDir = [System.IO.Path]::GetDirectoryName($outFull)
     if ($outDir -and -not (Test-Path -LiteralPath $outDir -PathType Container)) {
-        New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+        if ($PSCmdlet.ShouldProcess($outDir, 'Create directory')) {
+            New-Item -ItemType Directory -Path $outDir -Force | Out-Null
+        }
+    }
+
+    # ---- Build the request body -------------------------------------------
+    $body = [ordered]@{
+        text          = $speech
+        voice_id      = $VoiceId
+        language      = $Language
+        output_format = $outputFormat
+    }
+    if ($Speed -ne 1.0)      { $body.speed              = $Speed }
+    if ($TextNormalization)  { $body.text_normalization = $true }
+    if ($WithTimestamps)     { $body.with_timestamps    = $true }
+    if ($Replace)            { $body.replace            = $Replace }
+    $json = $body | ConvertTo-Json -Compress -Depth 5
+
+    $action = "Synthesize $($speech.Length) characters with voice '$VoiceId' ($Language, $Codec) via $TtsUri"
+    if (-not $PSCmdlet.ShouldProcess($outFull, $action)) {
+        return
     }
 
     # ---- Read the key from Credential Manager ------------------------------
@@ -170,19 +380,23 @@ function New-GrokVoice {
     $apiKey = $stored.Password   # SecureString; never converted to plain text here
 
     # ---- Call the speech endpoint -----------------------------------------
-    $body = @{
-        text          = $text
-        voice_id      = $VoiceId
-        language      = $Language
-        output_format = @{ codec = $codec }
-    } | ConvertTo-Json -Compress -Depth 4
+    $request = @{
+        Uri            = $TtsUri
+        Method         = 'Post'
+        Authentication = 'Bearer'
+        Token          = $apiKey
+        ContentType    = 'application/json; charset=utf-8'
+        Body           = [System.Text.Encoding]::UTF8.GetBytes($json)
+        TimeoutSec     = $TimeoutSec
+    }
 
     try {
-        $response = Invoke-WebRequest -Uri $TtsUri -Method Post `
-            -Authentication Bearer -Token $apiKey `
-            -ContentType 'application/json; charset=utf-8' `
-            -Body ([System.Text.Encoding]::UTF8.GetBytes($body)) `
-            -OutFile $outFull -PassThru
+        if ($WithTimestamps) {
+            $response = Invoke-WebRequest @request
+        }
+        else {
+            $response = Invoke-WebRequest @request -OutFile $outFull -PassThru
+        }
     }
     catch {
         # Surface the status and the server's error body; neither contains the key.
@@ -192,7 +406,9 @@ function New-GrokVoice {
             $status = [int]$_.Exception.Response.StatusCode
         }
         if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $detail = $_.ErrorDetails.Message }
-        if (Test-Path -LiteralPath $outFull) { Remove-Item -LiteralPath $outFull -Force -ErrorAction SilentlyContinue }
+        if (-not $WithTimestamps -and (Test-Path -LiteralPath $outFull)) {
+            Remove-Item -LiteralPath $outFull -Force -ErrorAction SilentlyContinue
+        }
         $suffix = if ($status) { " (HTTP $status)" } else { '' }
         throw "Text-to-speech request failed${suffix}: $detail"
     }
@@ -201,8 +417,28 @@ function New-GrokVoice {
         $stored = $null
     }
 
+    # ---- Write the result -------------------------------------------------
     $contentType = [string]$response.Headers['Content-Type']
-    if ($contentType -notmatch '^audio/') {
+
+    if ($WithTimestamps) {
+        if ($contentType -notmatch '^application/json') {
+            throw "Expected a JSON response with timestamps but got '$contentType'."
+        }
+        $payload = $response.Content | ConvertFrom-Json
+        if (-not $payload.audio) {
+            throw 'The timestamps response contained no audio.'
+        }
+        [System.IO.File]::WriteAllBytes($outFull, [Convert]::FromBase64String($payload.audio))
+        $meta = [ordered]@{
+            content_type     = $payload.content_type
+            duration         = $payload.duration
+            audio_timestamps = $payload.audio_timestamps
+        }
+        $meta | ConvertTo-Json -Depth 6 -Compress | Set-Content -LiteralPath $timestampsFull -Encoding utf8
+        Write-Verbose "Wrote timestamps to $timestampsFull (duration $($payload.duration) s)"
+        $contentType = [string]$payload.content_type
+    }
+    elseif ($contentType -notmatch '^audio/') {
         $preview = ''
         try {
             $raw = Get-Content -LiteralPath $outFull -Raw -ErrorAction Stop
@@ -212,15 +448,18 @@ function New-GrokVoice {
         throw "Expected an audio response but got '$contentType'. $preview"
     }
 
-    $bytes = (Get-Item -LiteralPath $outFull).Length
-    Write-Output "Wrote $outFull ($bytes bytes, $contentType)"
+    $item = Get-Item -LiteralPath $outFull
+    Write-Verbose "Wrote $outFull ($($item.Length) bytes, $contentType)"
+    $item
 }
 
 # When the file is executed directly (not dot-sourced), run the function with
 # the supplied arguments. When dot-sourced, only define the function.
 if ($MyInvocation.InvocationName -ne '.') {
-    if (-not $TextFile -or -not $OutFile) {
-        throw "Usage: New-GrokVoice.ps1 <TextFile> <OutFile> [-VoiceId <id>] [-CredentialTarget <name>]   (or dot-source the file and call New-GrokVoice)"
+    if (-not $OutFile -or -not ($TextFile -or $Text)) {
+        throw "Usage: New-GrokVoice.ps1 <TextFile> <OutFile> [options]   or   New-GrokVoice.ps1 -Text '<text>' <OutFile> [options]`n" +
+              "Options: -VoiceId -Language -Speed -Codec -SampleRate -BitRate -TextNormalization -Replace -WithTimestamps -CredentialTarget -Force -WhatIf`n" +
+              "Or dot-source the file and run Get-Help New-GrokVoice -Full."
     }
-    New-GrokVoice -TextFile $TextFile -OutFile $OutFile -VoiceId $VoiceId -CredentialTarget $CredentialTarget
+    New-GrokVoice @PSBoundParameters
 }
