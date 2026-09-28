@@ -21,6 +21,13 @@
     plain string header that could end up in an error message or a
     transcript.
 
+    Register the local SecretStore vault and set it as the default:
+
+        Register-SecretVault -ModuleName Microsoft.PowerShell.SecretStore -Name LocalStore -DefaultVault
+        Reset-SecretStore -Authentication None -Interaction None -Force
+
+        Set-SecretVaultDefault -Name LocalStore
+
     One-time setup with the companion Set-StoredSecret.ps1 (registers the
     SecretStore vault if needed and prompts for the key without echo):
 
@@ -241,7 +248,7 @@ function New-GrokVoice {
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [string]$Vault,
+        [string]$Vault = 'LocalStore',
 
         [Parameter()]
         [switch]$Force
