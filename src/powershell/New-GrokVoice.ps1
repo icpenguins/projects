@@ -6,28 +6,31 @@
     a file.
 
 .DESCRIPTION
-    Load the function into your session by dot-sourcing this file:
+    This file only defines the function. Load it into your session with
+    Import-Module or by dot-sourcing, then call New-GrokVoice:
 
-        . .\New-GrokVoice.ps1
-        New-GrokVoice .\notes.txt .\notes.mp3
+        Import-Module .\New-GrokVoice.ps1
+        New-GrokVoice .\notes.txt .\notes.mp3 -VoiceId ara -Speed 1.1
 
-    Running the file directly also works; every parameter below is accepted
-    on the command line:
+    The API key is read at run time from a PowerShell SecretManagement vault
+    (Microsoft.PowerShell.SecretManagement, backed by the
+    Microsoft.PowerShell.SecretStore vault). It is never placed in an
+    environment variable, a file, the command line, or output. Get-Secret
+    returns it as a SecureString, which is handed to Invoke-WebRequest
+    through -Authentication Bearer -Token, so it is never interpolated into a
+    plain string header that could end up in an error message or a
+    transcript.
 
-        .\New-GrokVoice.ps1 .\notes.txt .\notes.mp3 -VoiceId ara -Speed 1.1
+    One-time setup with the companion Set-StoredSecret.ps1 (registers the
+    SecretStore vault if needed and prompts for the key without echo):
 
-    The API key is read from Windows Credential Manager at run time with the
-    CredentialManager module from the PowerShell Gallery (installed for the
-    current user on first use if missing). It is never placed in an
-    environment variable, a file, the command line, or output. The key stays
-    a SecureString and is handed to Invoke-WebRequest through
-    -Authentication Bearer -Token, so it is never interpolated into a plain
-    string header that could end up in an error message or a transcript.
+        . .\Set-StoredSecret.ps1
+        Set-StoredSecret -Name localAgentKey
 
-    One-time setup (the /pass switch with no value prompts for the secret
-    without echo, so the key never appears in shell history):
-
-        cmdkey /generic:localAgentKey /user:xai /pass
+    SecretStore asks for a store password the first time it is used and
+    locks again after a timeout. For unattended use either run
+    Unlock-SecretStore first, or configure the store once with
+    Set-SecretStoreConfiguration -Authentication None.
 
     Text may contain xAI speech tags. Inline tags: [pause] [long-pause]
     [laugh] [cry] [sniff] [gasp] [sigh] [clear-throat]. Wrapping tags:
@@ -85,9 +88,13 @@
     -OutFile; the timing data (duration, graph_chars, graph_times) is written
     as JSON next to it with the extension .timestamps.json.
 
-.PARAMETER CredentialTarget
-    Name of the generic credential in Windows Credential Manager that holds
-    the API key. Defaults to "localAgentKey".
+.PARAMETER SecretName
+    Name of the secret in the SecretManagement vault that holds the API key.
+    Defaults to "localAgentKey".
+
+.PARAMETER Vault
+    Name of the registered SecretManagement vault to read from. When omitted,
+    every registered vault is searched (the default vault first).
 
 .PARAMETER Force
     Overwrite -OutFile (and the timestamps sidecar) if it already exists.
@@ -110,39 +117,13 @@
 .EXAMPLE
     New-GrokVoice .\notes.txt .\notes.mp3 -WithTimestamps -WhatIf
 #>
-[CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = 'File')]
-[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'CredentialTarget',
-    Justification = 'Holds the Credential Manager target name, not a secret.')]
-param(
-    [Parameter(ParameterSetName = 'File', Position = 0)]
-    [string]$TextFile,
-
-    [Parameter(ParameterSetName = 'Text')]
-    [string]$Text,
-
-    [Parameter(ParameterSetName = 'File', Position = 1)]
-    [Parameter(ParameterSetName = 'Text', Position = 0)]
-    [string]$OutFile,
-
-    [string]$VoiceId = 'eve',
-    [string]$Language = 'en',
-    [double]$Speed = 1.0,
-    [string]$Codec,
-    [int]$SampleRate,
-    [int]$BitRate,
-    [switch]$TextNormalization,
-    [hashtable]$Replace,
-    [switch]$WithTimestamps,
-    [string]$CredentialTarget = 'localAgentKey',
-    [switch]$Force
-)
 
 function New-GrokVoice {
     <#
     .SYNOPSIS
         Converts text to speech with the xAI (Grok) API and writes the audio
-        to a file. The API key is read from Windows Credential Manager
-        (target name "localAgentKey" unless -CredentialTarget is given).
+        to a file. The API key is read from a PowerShell SecretManagement
+        vault (secret name "localAgentKey" unless -SecretName is given).
 
     .DESCRIPTION
         Wraps POST https://api.x.ai/v1/tts. Text comes from -TextFile (the
@@ -187,8 +168,11 @@ function New-GrokVoice {
     .PARAMETER WithTimestamps
         Also write character timing JSON next to the audio file.
 
-    .PARAMETER CredentialTarget
-        Credential Manager target holding the key. Defaults to "localAgentKey".
+    .PARAMETER SecretName
+        Vault secret holding the key. Defaults to "localAgentKey".
+
+    .PARAMETER Vault
+        Registered vault to read from. Omit to search all registered vaults.
 
     .PARAMETER Force
         Overwrite existing output files.
@@ -204,8 +188,6 @@ function New-GrokVoice {
     #>
     [CmdletBinding(SupportsShouldProcess = $true, DefaultParameterSetName = 'File')]
     [OutputType([System.IO.FileInfo])]
-    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingPlainTextForPassword', 'CredentialTarget',
-        Justification = 'Holds the Credential Manager target name, not a secret.')]
     param(
         [Parameter(Mandatory = $true, ParameterSetName = 'File', Position = 0)]
         [ValidateNotNullOrEmpty()]
@@ -255,7 +237,11 @@ function New-GrokVoice {
 
         [Parameter()]
         [ValidateNotNullOrEmpty()]
-        [string]$CredentialTarget = 'localAgentKey',
+        [string]$SecretName = 'localAgentKey',
+
+        [Parameter()]
+        [ValidateNotNullOrEmpty()]
+        [string]$Vault,
 
         [Parameter()]
         [switch]$Force
@@ -367,17 +353,39 @@ function New-GrokVoice {
         return
     }
 
-    # ---- Read the key from Credential Manager ------------------------------
-    if (-not (Get-Module -ListAvailable -Name CredentialManager)) {
-        Install-Module -Name CredentialManager -Scope CurrentUser -Force
+    # ---- Read the key from the SecretManagement vault ----------------------
+    if (-not (Get-Module -ListAvailable -Name Microsoft.PowerShell.SecretManagement)) {
+        Install-Module -Name Microsoft.PowerShell.SecretManagement -Scope CurrentUser -Force
     }
-    Import-Module CredentialManager -ErrorAction Stop
+    Import-Module Microsoft.PowerShell.SecretManagement -ErrorAction Stop
 
-    $stored = Get-StoredCredential -Target $CredentialTarget
-    if ($null -eq $stored -or $null -eq $stored.Password -or $stored.Password.Length -eq 0) {
-        throw "No credential named '$CredentialTarget' in Windows Credential Manager. Create it with:  cmdkey /generic:$CredentialTarget /user:xai /pass"
+    if (-not (Get-SecretVault)) {
+        throw "No SecretManagement vault is registered. Run Set-StoredSecret -Name $SecretName (from Set-StoredSecret.ps1) to register the SecretStore vault and store the key."
     }
-    $apiKey = $stored.Password   # SecureString; never converted to plain text here
+    $lookup = @{ Name = $SecretName }
+    if ($Vault) { $lookup.Vault = $Vault }
+
+    $where = if ($Vault) { "vault '$Vault'" } else { 'any registered vault' }
+    if (-not (Get-SecretInfo @lookup -ErrorAction SilentlyContinue)) {
+        throw "No secret named '$SecretName' in $where. Store it with:  Set-StoredSecret -Name $SecretName"
+    }
+    try {
+        $stored = Get-Secret @lookup -ErrorAction Stop
+    }
+    catch {
+        # Typically the SecretStore is locked; the message says how to unlock it.
+        throw "Could not read secret '$SecretName' from $where. $($_.Exception.Message)"
+    }
+
+    $apiKey = switch ($stored) {
+        { $_ -is [securestring] }  { $_ }
+        { $_ -is [pscredential] }  { $_.Password }
+        default { throw "Secret '$SecretName' is a $($_.GetType().Name); it must be stored as a string (SecureString) or PSCredential." }
+    }
+    if ($apiKey.Length -eq 0) {
+        throw "Secret '$SecretName' is empty."
+    }
+    # $apiKey is a SecureString and is never converted to plain text here.
 
     # ---- Call the speech endpoint -----------------------------------------
     $request = @{
@@ -451,17 +459,4 @@ function New-GrokVoice {
     $item = Get-Item -LiteralPath $outFull
     Write-Verbose "Wrote $outFull ($($item.Length) bytes, $contentType)"
     $item
-}
-
-# When the file is executed directly, run the function with the supplied
-# arguments. When dot-sourced or loaded with Import-Module, only define the
-# function. InvocationName is '.' when dot-sourced and empty under
-# Import-Module; it is '&' or the script path when run directly.
-if ($MyInvocation.InvocationName -and $MyInvocation.InvocationName -ne '.') {
-    if (-not $OutFile -or -not ($TextFile -or $Text)) {
-        throw "Usage: New-GrokVoice.ps1 <TextFile> <OutFile> [options]   or   New-GrokVoice.ps1 -Text '<text>' <OutFile> [options]`n" +
-              "Options: -VoiceId -Language -Speed -Codec -SampleRate -BitRate -TextNormalization -Replace -WithTimestamps -CredentialTarget -Force -WhatIf`n" +
-              "Or dot-source the file and run Get-Help New-GrokVoice -Full."
-    }
-    New-GrokVoice @PSBoundParameters
 }
