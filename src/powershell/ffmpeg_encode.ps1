@@ -227,13 +227,13 @@ for ($i = 0; $i -lt $list.Count - 1; $i = $i + 2) {
     }
 
     if ($Spatial.IsPresent) {
-        $cmd += '-spatial_aq 1 '
+        $cmd += '-spatial-aq 1 -aq-strength 8 '
     }
 
     # Lookahead improves the video encoder’s rate-control accuracy by enabling the encoder to buffer the specified number of frames, estimate their complexity,
     # and allocate the bits appropriately among these frames proportional to their complexity.
     # https://docs.nvidia.com/video-technologies/video-codec-sdk/12.0/ffmpeg-with-nvidia-gpu/index.html
-    $cmd += '-preset slow -rc vbr -rc-lookahead 20 -2pass 1 -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
+    $cmd += '-preset slow -rc vbr -rc-lookahead 20 -multipass fullres -c:a copy -scodec copy -map 0:? -max_muxing_queue_size 1024 "$($list[$i + 1])"'
     $cmd = $ExecutionContext.InvokeCommand.ExpandString($cmd)
     Write-Host $cmd
 
